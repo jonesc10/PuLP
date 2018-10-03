@@ -61,6 +61,109 @@
 
 int seed;
 
+int* connectivity_bfs(pulp_graph_t& g, int num_parts, int* parts)
+{
+  int* conn = new int[g.n]; // connectivity assignments  
+  for (int v = 0; v < g.n; ++v)
+    conn[v] = -1;
+
+  // number of connected components per part
+  int* part_conns = (int*)malloc(num_parts*sizeof(int));
+  for (int p = 0; p < num_parts; ++p)
+    part_conns[p] = 0;
+
+  // Store the size of each component at the root vertex
+  int* conn_sizes = (int*) malloc(g.n*sizeof(int));
+  for (int v = 0; v < g.n; ++v) {
+    conn_sizes[v] = -1;
+  }
+
+  int* queue = (int*)malloc(g.n*sizeof(int));
+  int* next_queue = (int*)malloc(g.n*sizeof(int));
+  int queue_size = 0;
+  int next_size = 0;
+  int conn_size = 0;
+
+  bool* visited = (bool*)malloc(g.n*sizeof(int));
+  for (int v = 0; v < g.n; ++v)
+    visited[v] = false;
+
+  int num_comps = 0;
+
+  for (int v = 0; v < g.n; ++v) {
+    if (!visited[v]) {
+      visited[v] = true;
+      conn[v] = v;
+      queue[0] = v;
+      queue_size = 1;
+      next_size = 0;
+      conn_size = 1;
+
+      while (queue_size) {
+        for (int i = 0; i < queue_size; ++i) {
+          int vert = queue[i];
+
+          for (int j = 0; j < out_degree(g, vert); ++j) {
+	    int adj = (out_vertices(g, vert))[j];
+            if (!visited[adj] && (parts[adj]==parts[v])) {
+              visited[adj] = true;
+              next_queue[next_size++] = adj;
+              conn[adj] = v;
+	      ++conn_size;
+            }
+          }
+        }
+
+        int* temp = queue;
+        queue = next_queue;
+        next_queue = temp;
+        queue_size = next_size;
+        next_size = 0;
+      }
+
+      conn_sizes[v] = conn_size;
+      ++part_conns[parts[v]];
+      ++num_comps;
+    }
+  }
+
+  int** part_conn_sizes = (int**) malloc(num_parts*sizeof(int*));
+  for (int p = 0; p < num_parts; ++p) {
+    part_conn_sizes[p] = (int*) malloc(part_conns[p]*sizeof(int));
+  }
+
+  int* part_conn_iter = (int*) malloc(num_parts*sizeof(int));
+  for (int p = 0; p < num_parts; ++p) {
+    part_conn_iter[p] = 0;
+  }
+
+  for (int v = 0; v < g.n; ++v) {
+    if (conn[v] == v) {
+      int p = parts[v];
+      part_conn_sizes[p][part_conn_iter[p]] = conn_sizes[v];
+      ++part_conn_iter[p];
+    } 
+  }
+
+  printf("Total number of components: %d\n", num_comps);
+  for (int p = 0; p < num_parts; ++p) {
+    printf("  Partition %2d has %4d component(s)\n", p, part_conns[p]);
+    for (int i = 0; i < part_conns[p]; ++i) {
+      printf("%4d  ", part_conn_sizes[p][i]);
+    }
+    printf("\n");
+  }
+
+  free(visited);
+  free(queue);
+  free(next_queue);
+  free(part_conns);
+  free(conn_sizes);
+
+  return conn;
+}
+
+
 extern "C" int pulp_run(pulp_graph_t* g, pulp_part_control_t* ppc, 
           int* parts, int num_parts)
 {
@@ -189,6 +292,9 @@ extern "C" int pulp_run(pulp_graph_t* g, pulp_part_control_t* ppc,
 
     elt2 = timer() - elt2;
     if (verbose) printf("\tFinished outer loop iter %d: %9.6lf(s)\n", (boi+1), elt2);
+  
+    // Show connectivity details after each iteration
+    connectivity_bfs(*g, num_parts, parts);
   }
 
   elt = timer() - elt;
@@ -204,7 +310,6 @@ double timer()
   gettimeofday(&tp, NULL);
   return ((double) (tp.tv_sec) + 1e-6 * tp.tv_usec);
 }
-
 
 void evaluate_quality(pulp_graph_t& g, int num_parts, int* parts)
 {
@@ -372,7 +477,7 @@ void evaluate_quality(pulp_graph_t& g, int num_parts, int* parts)
   printf("Boundary overweight: %9.3lf\n", max_overweight_b);
   printf("CommVol overweight: %9.3lf, max: %u\n", max_overweight_cv, max_comm_size);
   printf("EdgeCut overweight: %9.3lf, max: %u\n", max_overweight_ec, max_edge_cut);
-  
+
   for (int i = 0; i < num_parts; ++i)
   {
     delete [] neighborhoods[i];
@@ -388,3 +493,5 @@ void evaluate_quality(pulp_graph_t& g, int num_parts, int* parts)
   delete [] boundary_verts;
   delete [] edges_per_part;
 }
+
+
