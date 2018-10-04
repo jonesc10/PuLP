@@ -44,6 +44,241 @@
 
 using namespace std;
 
+void merge_small_components(pulp_graph_t& g, int num_parts, int* parts)
+{
+  bool debug = false;
+
+  int* conn = new int[g.n]; // connectivity assignments  
+  for (int v = 0; v < g.n; ++v)
+    conn[v] = -1;
+
+  // number of connected components per part
+  int* part_conns = (int*)malloc(num_parts*sizeof(int));
+  for (int p = 0; p < num_parts; ++p)
+    part_conns[p] = 0;
+
+  // Store the size of each component at the root vertex
+  int* conn_sizes = (int*) malloc(g.n*sizeof(int));
+  for (int v = 0; v < g.n; ++v) {
+    conn_sizes[v] = -1;
+  }
+
+  // Track size of largest component in each part
+  int* max_conn_sizes = (int*) malloc(num_parts*sizeof(int));
+  for (int p = 0; p < num_parts; ++p) {
+    max_conn_sizes[p] = 0;
+  }
+
+  int* queue = (int*)malloc(g.n*sizeof(int));
+  int* next_queue = (int*)malloc(g.n*sizeof(int));
+  int queue_size = 0;
+  int next_size = 0;
+  int conn_size = 0;
+
+  bool* visited = (bool*)malloc(g.n*sizeof(int));
+  for (int v = 0; v < g.n; ++v)
+    visited[v] = false;
+
+  int num_comps = 0;
+
+  for (int v = 0; v < g.n; ++v) {
+    if (!visited[v]) {
+      visited[v] = true;
+      conn[v] = v;
+      queue[0] = v;
+      queue_size = 1;
+      next_size = 0;
+      conn_size = 1;
+
+      while (queue_size) {
+        for (int i = 0; i < queue_size; ++i) {
+          int vert = queue[i];
+
+          for (int j = 0; j < out_degree(g, vert); ++j) {
+	    int adj = (out_vertices(g, vert))[j];
+            if (!visited[adj] && (parts[adj]==parts[v])) {
+              visited[adj] = true;
+              next_queue[next_size++] = adj;
+              conn[adj] = v;
+	      ++conn_size;
+            }
+          }
+        }
+
+        int* temp = queue;
+        queue = next_queue;
+        next_queue = temp;
+        queue_size = next_size;
+        next_size = 0;
+      }
+
+      // Update max component size for the part
+      if (conn_size > max_conn_sizes[parts[v]])
+        max_conn_sizes[parts[v]] = conn_size;
+      // increment number of components for the part
+      ++part_conns[parts[v]];
+
+      conn_sizes[v] = conn_size;
+      ++num_comps;
+    }
+  }
+
+  // Per part, store component IDs and sizes
+  int** part_conn_ids = (int**) malloc(num_parts*sizeof(int*));
+  int** part_conn_sizes = (int**) malloc(num_parts*sizeof(int*));
+  for (int p = 0; p < num_parts; ++p) {
+    part_conn_ids[p] = (int*) malloc(part_conns[p]*sizeof(int));
+    part_conn_sizes[p] = (int*) malloc(part_conns[p]*sizeof(int));
+  }
+
+  int* part_conn_iter = (int*) malloc(num_parts*sizeof(int));
+  for (int p = 0; p < num_parts; ++p) {
+    part_conn_iter[p] = 0;
+  }
+
+  for (int v = 0; v < g.n; ++v) {
+    if (conn[v] == v) {
+      int p = parts[v];
+      part_conn_ids[p][part_conn_iter[p]] = v;
+      part_conn_sizes[p][part_conn_iter[p]] = conn_sizes[v];
+      ++part_conn_iter[p];
+    } 
+  }
+
+  if (debug) {
+    printf("BEFORE -- Total number of components: %d\n", num_comps);
+    for (int p = 0; p < num_parts; ++p) {
+      printf("  Partition %2d has %4d component(s) -- max size: %4d\n", 
+             p, part_conns[p], max_conn_sizes[p]);
+      for (int i = 0; i < part_conns[p]; ++i) {
+        if (part_conn_sizes[p][i] > 0)
+          printf("%4d  ", part_conn_sizes[p][i]);
+      }
+      printf("\n");
+    }
+  }
+
+  // Merge all small components until desired number of parts is reached
+  int max_iters = 10;
+  int iter = 0;
+  while (num_comps > num_parts && iter < max_iters) {
+    // Iterate over each component in each part
+    for (int p = 0; p < num_parts; ++p) {
+      for (int c = 0; c < part_conns[p]; ++c) {
+        // Only merge components smaller than the largest one in their part
+        //  and if they have not already been merged
+        if (part_conn_sizes[p][c] < max_conn_sizes[p] &&
+            part_conn_sizes[p][c] > 0) {
+          // Find a component neighboring c
+          // vvvvvvvv TODO move to help function: return neighbor_id
+          bool found = false;
+          int neighbor_id = -1;
+          for (int v = 0; v < g.n; ++v) {
+            visited[v] = false;
+          }
+          int c_id = part_conn_ids[p][c];
+          visited[c_id] = true;
+          queue[0] = c_id;
+          queue_size = 1;
+          next_size = 0;
+          while (queue_size && !found) {
+            for (int i = 0; i < queue_size && !found; ++i) {
+              int vert = queue[i];
+
+              for (int j = 0; j < out_degree(g, vert); ++j) {
+	        int adj = (out_vertices(g, vert))[j];
+                if (!visited[adj]) {
+                  if (parts[c_id] != parts[adj]) {
+                    found = true;
+                    neighbor_id = conn[adj];
+                    break;
+                  }
+                  visited[adj] = true;
+                  next_queue[next_size++] = adj;
+                }
+              }
+            }
+            int* temp = queue;
+            queue = next_queue;
+            next_queue = temp;
+            queue_size = next_size;
+            next_size = 0;
+          }
+          // ^^^^^^^^ TODO move to helper function
+          
+          // No neighbor for this component. Merging not possible
+          if (!found)
+            continue;
+
+          // Merge c with this other component
+          // vvvvvvvv TODO move to helper function: return node_count
+          conn[c_id] = neighbor_id;
+          int neighbor_part = parts[neighbor_id];
+          parts[c_id] = neighbor_part;
+          queue[0] = c_id;
+          queue_size = 1;
+          next_size = 0;
+          int node_count = 1;
+          while (queue_size) {
+            for (int i = 0; i < queue_size; ++i) {
+              int vert = queue[i];
+              for (int j = 0; j < out_degree(g, vert); ++j) {
+	        int adj = (out_vertices(g, vert))[j];
+                if (conn[adj] == c_id) {
+                  // Chance connectivity and partition of each node
+                  conn[adj] = neighbor_id;
+                  parts[adj] = neighbor_part;
+                  next_queue[next_size++] = adj;
+                  ++node_count;
+                }
+              }
+            }
+            int* temp = queue;
+            queue = next_queue;
+            next_queue = temp;
+            queue_size = next_size;
+            next_size = 0;
+          }
+          // ^^^^^^^^ TODO move to helper function
+          --num_comps;
+          
+          // Update sizes of components
+          part_conn_sizes[p][c] = 0;
+          for (int cc = 0; cc < part_conns[parts[neighbor_id]]; ++cc) {
+            if (part_conn_ids[parts[neighbor_id]][cc] == neighbor_id) {
+              int sum = part_conn_sizes[parts[neighbor_id]][cc] + node_count;
+              part_conn_sizes[parts[neighbor_id]][cc] = sum;
+              // Update max component size if necessary
+              if (max_conn_sizes[parts[neighbor_id]] < sum)
+                max_conn_sizes[parts[neighbor_id]] = sum;
+              break;
+            } 
+          }
+        } 
+      }
+    }
+    ++iter;
+  }
+
+  if (debug) {
+    printf("AFTER  -- Total number of components: %d\n", num_comps);
+    for (int p = 0; p < num_parts; ++p) {
+      printf("  Partition %2d has %4d component(s)\n", p, part_conns[p]);
+      for (int i = 0; i < part_conns[p]; ++i) {
+        if (part_conn_sizes[p][i] > 0)
+          printf("%4d  ", part_conn_sizes[p][i]);
+      }
+      printf("\n");
+    }
+  }
+
+  free(visited);
+  free(queue);
+  free(next_queue);
+  free(part_conns);
+  free(conn_sizes);
+}
+
 /*
 '########:::::'###::::'##::::::::::'##::::'##:'########:'########::'########:
  ##.... ##:::'## ##::: ##:::::::::: ##:::: ##: ##.....:: ##.... ##:... ##..::
@@ -396,6 +631,9 @@ while(t < vert_outer_iter)
   }
   else
     ++t;
+
+  // Check connectivity of parts and merge small components
+  merge_small_components(g, num_parts, parts);
 }
 } // end for
 

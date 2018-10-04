@@ -293,13 +293,14 @@ extern "C" int pulp_run(pulp_graph_t* g, pulp_part_control_t* ppc,
     elt2 = timer() - elt2;
     if (verbose) printf("\tFinished outer loop iter %d: %9.6lf(s)\n", (boi+1), elt2);
   
-    // Show connectivity details after each iteration
-    connectivity_bfs(*g, num_parts, parts);
   }
 
   elt = timer() - elt;
   if (verbose) printf("Partitioning finished: %9.6lf(s)\n", elt);
 
+  // Show connectivity details
+  connectivity_bfs(*g, num_parts, parts);
+  
   return 0;
 }
 
