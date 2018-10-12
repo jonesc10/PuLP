@@ -173,6 +173,12 @@ int main(int argc, char** argv)
     }
   }  
 
+  // Create/overwrite output file used for component merging statistics
+  ofstream output;
+  output.open("merge_stats.csv");
+  output << "EdgeCut Before, After, Diff, VertOverweight Before, After, Diff\n";
+  output.close();
+
   double elt = 0.0;
   double avg = 0.0;
 

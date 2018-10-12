@@ -300,6 +300,7 @@ extern "C" int pulp_run(pulp_graph_t* g, pulp_part_control_t* ppc,
 
   // Show connectivity details
   connectivity_bfs(*g, num_parts, parts);
+  evaluate_quality(*g, num_parts, parts);
   
   return 0;
 }

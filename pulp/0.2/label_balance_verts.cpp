@@ -41,8 +41,76 @@
 // *****************************************************************************
 //@HEADER
 */
-
+#include<fstream> // for component merging stats output to file
 using namespace std;
+
+void get_cut_overweight(pulp_graph_t& g, int num_parts, int* parts,
+                        long* cut, double* overweight)
+{
+  int num_verts = g.n;
+  long* part_sizes = new long[num_parts];
+  long* edge_cuts = new long[num_parts];
+  bool weighted = (g.vertex_weights_sum > 0);
+
+  for (int i = 0; i < num_parts; ++i)
+  {
+    part_sizes[i] = 0;
+    edge_cuts[i] = 0;
+  }
+
+  for (int v = 0; v < num_verts; ++v)
+  { 
+    if (weighted)
+      part_sizes[parts[v]] += g.vertex_weights[v];
+    else
+      ++part_sizes[parts[v]];
+
+    int part = parts[v];
+
+    int out_degree = out_degree(g, v);
+    int* outs = out_vertices(g, v);
+    int* weights;
+    if (weighted)
+      weights = out_weights(g, v);
+    for (int j = 0; j < out_degree; ++j)
+    {
+      int out = outs[j];
+      int out_part = parts[out];
+      if (out_part != part)
+      {
+        if (weighted)
+          edge_cuts[part] += weights[j];
+        else
+          ++edge_cuts[part];
+      }
+    }
+  }
+
+  long edge_cut = 0;
+  long max_vert_size = 0;
+  for (int i = 0; i < num_parts; ++i)
+  {
+    edge_cut += edge_cuts[i];
+
+    if (part_sizes[i] > max_vert_size)
+      max_vert_size = part_sizes[i];
+  }
+
+  long avg_size_vert;
+  if (weighted) 
+    avg_size_vert = g.vertex_weights_sum / (long)num_parts;
+  else 
+    avg_size_vert = num_verts / (unsigned)num_parts;
+  double max_overweight_v = (double)max_vert_size/(double)avg_size_vert;
+  edge_cut /= 2;
+  long unsigned edgeCut = (long unsigned)edge_cut;
+
+  *cut = edgeCut;
+  *overweight = max_overweight_v;
+
+  delete [] part_sizes;
+  delete [] edge_cuts;
+}
 
 void merge_small_components(pulp_graph_t& g, int num_parts, int* parts)
 {
@@ -158,6 +226,10 @@ void merge_small_components(pulp_graph_t& g, int num_parts, int* parts)
     }
   }
 
+  long edge_cut_before;
+  double vert_overweight_before;
+  get_cut_overweight(g, num_parts, parts, &edge_cut_before, &vert_overweight_before);
+  
   // Merge all small components until desired number of parts is reached
   int max_iters = 10;
   int iter = 0;
@@ -271,6 +343,24 @@ void merge_small_components(pulp_graph_t& g, int num_parts, int* parts)
       printf("\n");
     }
   }
+  
+  long edge_cut_after;
+  double vert_overweight_after;
+  get_cut_overweight(g, num_parts, parts, &edge_cut_after, &vert_overweight_after);
+  printf("\nEDGE_CUT:          %8ld -> %8ld  | %12ld\n", 
+         edge_cut_before, edge_cut_after, edge_cut_after-edge_cut_before);
+  printf("VERT_OVERWEIGHT:   %8f -> %8f  | %12f\n", 
+         vert_overweight_before, vert_overweight_after, 
+         vert_overweight_after-vert_overweight_before);
+
+  // Output edge cut and vert overweightness to file
+  ofstream output;
+  output.open("merge_stats.csv", ios::app);
+  output << edge_cut_before << ", " << edge_cut_after << ", " <<
+          edge_cut_after-edge_cut_before << ", " << vert_overweight_before <<
+          ", " << vert_overweight_after << ", " << 
+          vert_overweight_after-vert_overweight_before << "\n";
+  output.close();
 
   free(visited);
   free(queue);
