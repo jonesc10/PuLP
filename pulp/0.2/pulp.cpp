@@ -219,6 +219,10 @@ extern "C" int pulp_run(pulp_graph_t* g, pulp_part_control_t* ppc,
   }
 
 
+  connectivity_bfs(*g, num_parts, parts);
+  // SINGLE THREAD FOR TESTING LEAVES ONLY
+  omp_set_num_threads(1);
+
   if (verbose) printf("\tBeginning vertex (and edge) refinement\n");
   for (int boi = 0; boi < balance_outer_iter; ++boi)
   {

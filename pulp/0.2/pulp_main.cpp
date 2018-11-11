@@ -122,7 +122,7 @@ int main(int argc, char** argv)
   bool do_lp_init = false;
   bool do_edge_balance = false;
   bool do_maxcut_balance = false;
-  bool eval_quality = false;
+  bool eval_quality = true;
   int pulp_seed = rand();
 
   char c;
