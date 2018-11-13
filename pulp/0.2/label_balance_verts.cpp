@@ -42,7 +42,77 @@
 //@HEADER
 */
 
+#include<fstream> // for stat output to file stats.csv
+
 using namespace std;
+
+void get_cut_overweight(pulp_graph_t& g, int num_parts, int* parts,
+                        long* cut, double* overweight)
+{
+  int num_verts = g.n;
+  long* part_sizes = new long[num_parts];
+  long* edge_cuts = new long[num_parts];
+  bool weighted = (g.vertex_weights_sum > 0);
+
+  for (int i = 0; i < num_parts; ++i)
+  {
+    part_sizes[i] = 0;
+    edge_cuts[i] = 0;
+  }
+
+  for (int v = 0; v < num_verts; ++v)
+  { 
+    if (weighted)
+      part_sizes[parts[v]] += g.vertex_weights[v];
+    else
+      ++part_sizes[parts[v]];
+
+    int part = parts[v];
+
+    int out_degree = out_degree(g, v);
+    int* outs = out_vertices(g, v);
+    int* weights;
+    if (weighted)
+      weights = out_weights(g, v);
+    for (int j = 0; j < out_degree; ++j)
+    {
+      int out = outs[j];
+      int out_part = parts[out];
+      if (out_part != part)
+      {
+        if (weighted)
+          edge_cuts[part] += weights[j];
+        else
+          ++edge_cuts[part];
+      }
+    }
+  }
+
+  long edge_cut = 0;
+  long max_vert_size = 0;
+  for (int i = 0; i < num_parts; ++i)
+  {
+    edge_cut += edge_cuts[i];
+
+    if (part_sizes[i] > max_vert_size)
+      max_vert_size = part_sizes[i];
+  }
+
+  long avg_size_vert;
+  if (weighted) 
+    avg_size_vert = g.vertex_weights_sum / (long)num_parts;
+  else 
+    avg_size_vert = num_verts / (unsigned)num_parts;
+  double max_overweight_v = (double)max_vert_size/(double)avg_size_vert;
+  edge_cut /= 2;
+  long unsigned edgeCut = (long unsigned)edge_cut;
+
+  *cut = edgeCut;
+  *overweight = max_overweight_v;
+
+  delete [] part_sizes;
+  delete [] edge_cuts;
+}
 
 void init_bfs_trees(pulp_graph_t& g, int num_parts, int* parts,
   int* num_children, int* parents, int* levels)
@@ -168,6 +238,18 @@ void label_balance_verts(pulp_graph_t& g, int num_parts, int* parts,
   int* parents = new int[num_verts];
   int* levels = new int[num_verts];
   init_bfs_trees(g, num_parts, parts, num_children, parents, levels);
+  
+  // Display current edge cut and vertex overweightness
+  long edge_cut;
+  double vert_overweight;
+  get_cut_overweight(g, num_parts, parts, &edge_cut, &vert_overweight);
+  printf("---- Edge Cut: %7ld\n", edge_cut);
+  printf("---- Vert Overweight: %.6f\n", vert_overweight);
+  // Write to stats file
+  ofstream output;
+  output.open("stats.csv", ios::app);
+  output << edge_cut << "," << vert_overweight << "\n";
+  output.close();
 
 while(t < vert_outer_iter)
 {

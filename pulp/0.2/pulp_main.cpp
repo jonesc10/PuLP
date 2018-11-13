@@ -173,6 +173,12 @@ int main(int argc, char** argv)
     }
   }  
 
+  //  Create/overwrite output file for edgecut and vert overweight stats
+  ofstream output;
+  output.open("stats.csv");
+  output << "EdgeCut,VertOverweight\n";
+  output.close();
+
   double elt = 0.0;
   double avg = 0.0;
 
