@@ -46,6 +46,9 @@
 
 using namespace std;
 
+// vertices with this number of children or below will be moving partitions
+int MAX_NUM_CHILDREN = 0;
+
 void get_cut_overweight(pulp_graph_t& g, int num_parts, int* parts,
                         long* cut, double* overweight)
 {
@@ -303,7 +306,7 @@ while(t < vert_outer_iter)
         }
       }
 
-      if (max_part != part && num_children[v] == 0) //// CHECK IF LEAF
+      if (max_part != part && num_children[v] <= MAX_NUM_CHILDREN)
       {
         // Find vertex in max_part adjacent to v on lowest level
         int min_level = num_verts;
@@ -318,10 +321,22 @@ while(t < vert_outer_iter)
         }
         // Adjust num_children, parents and levels
         if (adj != -1) {
-          --(num_children[parents[v]]);
+          if (parents[v] != -1)
+	    --(num_children[parents[v]]);
           parents[v] = adj;
           ++(num_children[adj]);
           levels[v] = levels[adj] + 1;
+
+	  // If v was not a leaf, adjust its previous children
+	  if (num_children[v] != 0) {
+	    for (unsigned j = 0; j < out_degree; ++j)
+	    {
+	      if (parents[outs[j]] == v)
+		parents[outs[j]] = -1;
+	    }
+	  }
+
+	  num_children[v] = 0;
         } else {
           printf("ERROR: vertex changing parts without adjacent vertex\n");
         }
@@ -453,7 +468,7 @@ while(t < vert_outer_iter)
           max_part = p;
         }
 
-      if (max_part != part && num_children[v]==0) //// CHECK IF LEAF
+      if (max_part != part && num_children[v] <= MAX_NUM_CHILDREN)
       {
         double new_max_imb = (double)(part_sizes[max_part] + 1) / avg_size;
         if ( new_max_imb < vert_balance)
@@ -471,14 +486,26 @@ while(t < vert_outer_iter)
           }
           // Adjust num_children, parents and levels
           if (adj != -1) {
-            --(num_children[parents[v]]);
+            if (parents[v] != -1)
+	      --(num_children[parents[v]]);
             parents[v] = adj;
             ++(num_children[adj]);
             levels[v] = levels[adj] + 1;
+  
+	    // If v was not a leaf, adjust its previous children
+	    if (num_children[v] != 0) {
+	      for (unsigned j = 0; j < out_degree; ++j)
+	      {
+	        if (parents[outs[j]] == v)
+		  parents[outs[j]] = -1;
+	      }
+	    }
+
+	    num_children[v] = 0;
           } else {
             printf("ERROR: vertex changing parts without adjacent vertex\n");
           }
-        
+          
           ++num_swapped_2;
           parts[v] = max_part;
       #pragma omp atomic
