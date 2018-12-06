@@ -42,6 +42,8 @@
 //@HEADER
 */
 
+#include "bicc.cpp"
+
 using namespace std;
 
 /*
@@ -78,6 +80,9 @@ void label_balance_verts(pulp_graph_t& g, int num_parts, int* parts,
   int next_size = 0;
   int t = 0;
   int num_tries = 0;
+
+  bool articulation_off = false;
+  biconnected* bc = NULL;
 
 #pragma omp parallel
 {
@@ -125,6 +130,9 @@ while(t < vert_outer_iter)
   num_swapped_1 = 0;
   queue_size = num_verts;
   next_size = 0;
+  
+  bc = new biconnected(g, parts);
+  printf("Articulation count: %d\n", bc->get_articulation_count(g));
 }
 
   int num_iter = 0;
@@ -162,7 +170,7 @@ while(t < vert_outer_iter)
         }
       }
 
-      if (max_part != part)
+      if (max_part != part && (articulation_off || !bc->is_articulation(v)))
       {
         parts[v] = max_part;
         ++num_swapped_1;
@@ -290,8 +298,8 @@ while(t < vert_outer_iter)
           max_count = part_counts[p];
           max_part = p;
         }
-
-      if (max_part != part)
+      
+      if (max_part != part && (articulation_off || !bc->is_articulation(v)))
       {
         double new_max_imb = (double)(part_sizes[max_part] + 1) / avg_size;
         if ( new_max_imb < vert_balance)
