@@ -33,9 +33,6 @@ public:
     for (int v = 0; v < num_verts; ++v)
       if (pre[v] == -1)
         dfs(g, v, v);
-
-
-  //  label_edges(g);
   }
 
   ~biconnected()
@@ -110,41 +107,9 @@ private:
     }
   }
 
-  void label_edges(pulp_graph_t& g)
-  {
-    int num_verts = g.n;
-    int num_edges = g.m;
-    int* out_array = g.out_array;
-    long* out_degree_list = g.out_degree_list;
-
-    labels = new int[num_edges];
-
-    for (int v = 0; v < num_verts; ++v)
-    {
-      int low_v = low[v];
-      int pre_v = pre[v];
-
-      unsigned int begin = out_degree_list[v];
-      unsigned int end = out_degree_list[v+1];
-      for (unsigned int i = begin; i < end; ++i)
-      {
-        int out = out_array[i];
-        if (low[out] == low_v)
-          labels[i] = low_v;
-        else if (pre[out] == pre_v)
-          labels[i] = low_v;
-        else if (out == pre_v)
-          labels[i] = low_v;
-        else
-          labels[i] = pre_v;
-      }
-    }
-  }
-
   int* g_parts;
   int* low;
   int* pre;
-  int* labels;
   int cnt;
   int articulation_count;
   bool* articulation;

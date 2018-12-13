@@ -82,7 +82,12 @@ void label_balance_verts(pulp_graph_t& g, int num_parts, int* parts,
   int num_tries = 0;
 
   bool articulation_off = false;
-  biconnected* bc = NULL;
+  biconnected* bc = new biconnected(g, parts);
+  printf("Articulation count: %7d\n", bc->get_articulation_count(g));
+ 
+  // every bc_rate swapped vertices, recalculate biconnectivity
+  int bc_rate = 10000;
+  int swapped_counter = 0; 
 
 #pragma omp parallel
 {
@@ -130,9 +135,6 @@ while(t < vert_outer_iter)
   num_swapped_1 = 0;
   queue_size = num_verts;
   next_size = 0;
-  
-  bc = new biconnected(g, parts);
-  printf("Articulation count: %d\n", bc->get_articulation_count(g));
 }
 
   int num_iter = 0;
@@ -178,7 +180,16 @@ while(t < vert_outer_iter)
         --part_sizes[part];
     #pragma omp atomic
         ++part_sizes[max_part];
-        
+       
+        // Potentially recalculate biconnectivity
+        if (++swapped_counter == bc_rate)
+        {
+          swapped_counter = 0;
+          delete bc;
+          bc = new biconnected(g, parts);
+          printf("Articulation count: %7d  --  Balance\n", bc->get_articulation_count(g));
+        }
+
         part_weights[part] = vert_balance * avg_size / (double)part_sizes[part] - 1.0;
         part_weights[max_part] = vert_balance * avg_size / (double)part_sizes[max_part]  - 1.0;   
         
@@ -310,6 +321,15 @@ while(t < vert_outer_iter)
           ++part_sizes[max_part];
       #pragma omp atomic
           --part_sizes[part];
+       
+          // Potentially recalculate biconnectivity
+          if (++swapped_counter == bc_rate)
+          {
+            swapped_counter = 0;
+            delete bc;
+            bc = new biconnected(g, parts);
+            printf("Articulation count: %7d  --          Refine\n", bc->get_articulation_count(g));
+          }
 
           if (!in_queue_next[v])
           {
@@ -418,6 +438,7 @@ while(t < vert_outer_iter)
   delete [] queue_next;
   delete [] in_queue;
   delete [] in_queue_next;
+  delete bc;
 }
 
 
