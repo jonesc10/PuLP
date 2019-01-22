@@ -59,6 +59,8 @@
 #include "label_balance_edges.cpp"
 #include "label_balance_edges_maxcut.cpp"
 
+#include <fstream> // For vert_overweight, edgecut file output.csv
+
 int seed;
 
 int* connectivity_bfs(pulp_graph_t& g, int num_parts, int* parts)
@@ -477,6 +479,13 @@ void evaluate_quality(pulp_graph_t& g, int num_parts, int* parts)
   printf("Boundary overweight: %9.3lf\n", max_overweight_b);
   printf("CommVol overweight: %9.3lf, max: %u\n", max_overweight_cv, max_comm_size);
   printf("EdgeCut overweight: %9.3lf, max: %u\n", max_overweight_ec, max_edge_cut);
+
+  printf("writing to output.csv... ");
+  ofstream output;
+  output.open("output.csv", ios::app);
+  output << max_overweight_v << "," << edgeCut << "\n";
+  output.close();
+  printf("Done\n");
 
   for (int i = 0; i < num_parts; ++i)
   {
