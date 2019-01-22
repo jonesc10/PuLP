@@ -44,6 +44,60 @@
 
 using namespace std;
 
+void init_bfs_trees(pulp_graph_t& g, int num_parts, int* parts,
+                    int* num_children, int* parents, int* levels)
+{
+  int* queue = (int*) malloc(g.n*sizeof(int));
+  int* next_queue = (int*) malloc(g.n*sizeof(int));
+  int queue_size = 0;
+  int next_queue_size = 0;
+
+  bool* visited = (bool*) malloc(g.n*sizeof(int));
+  for (int v = 0; v < g.n; ++v)
+    visited[v] = false;
+
+  for (int v = 0; v < g.n; ++v){
+    if (!visited[v]) {
+      visited[v] = true;
+      queue[0] = v;
+      queue_size = 1;
+      next_queue_size = 0;
+      num_children[v] = 0;
+      parents[v] = -1;
+      levels[v] = 0;
+
+      while (queue_size) {
+        for (int i = 0; i < queue_size; ++i) {
+          int vert = queue[i];
+
+          for (int j = 0; j < out_degree(g, vert); ++j) {
+            int adj = (out_vertices(g, vert))[j];
+            if (!visited[adj] && (parts[adj] == parts[v])) {
+              visited[adj] = true;
+              next_queue[next_queue_size++] = adj;
+              ++num_children[vert];
+              num_children[adj] = 0;
+              parents[adj] = vert;
+              levels[adj] = levels[vert] + 1;
+            }
+          }
+        }
+
+        int* temp = queue;
+        queue = next_queue;
+        next_queue = temp;
+        queue_size = next_queue_size;
+        next_queue_size = 0;
+      }
+    }
+  }
+
+// Free memory
+  free(queue);
+  free(next_queue);
+  free(visited);
+}
+
 /*
 '########:::::'###::::'##::::::::::'##::::'##:'########:'########::'########:
  ##.... ##:::'## ##::: ##:::::::::: ##:::: ##: ##.....:: ##.... ##:... ##..::
@@ -110,6 +164,13 @@ void label_balance_verts(pulp_graph_t& g, int num_parts, int* parts,
       part_weights[p] = 0.0;
   }
 
+
+  // init BFS trees for how many children each vertex has
+  int* num_children = new int[num_verts];
+  int* parents = new int[num_verts];
+  int* levels = new int[num_verts];
+  init_bfs_trees(g, num_parts, parts, num_children, parents, levels);
+
 while(t < vert_outer_iter)
 {
 
@@ -164,6 +225,21 @@ while(t < vert_outer_iter)
 
       if (max_part != part)
       {
+        // Find vertex in max_part adjacent to v on lowest level
+        int min_level = num_verts;
+        int adj = -1;
+        for (unsigned j = 0; j < out_degree; ++j) {
+          if (parts[outs[j]] == max_part && levels[outs[j]] < min_level) {
+            adj = outs[j];
+            min_level = levels[adj];
+          }
+        }
+        // Adjust num_children, parents, and levels
+        --(num_children[parents[v]]);
+        parents[v] = adj;
+        ++(num_children[adj]);
+        levels[v] = levels[adj] + 1;
+
         parts[v] = max_part;
         ++num_swapped_1;
     #pragma omp atomic
@@ -296,6 +372,21 @@ while(t < vert_outer_iter)
         double new_max_imb = (double)(part_sizes[max_part] + 1) / avg_size;
         if ( new_max_imb < vert_balance)
         {
+          // Find vertex in max_part adjacent to v on lowest level
+          int min_level = num_verts;
+          int adj = -1;
+          for (unsigned j = 0; j < out_degree; ++j) {
+            if (parts[outs[j]] == max_part && levels[outs[j]] < min_level) {
+              adj = outs[j];
+              min_level = levels[adj];
+            }
+          }
+          // Adjust num_children, parents, and levels
+          --(num_children[parents[v]]);
+          parents[v] = adj;
+          ++(num_children[adj]);
+          levels[v] = levels[adj] + 1;
+          
           ++num_swapped_2;
           parts[v] = max_part;
       #pragma omp atomic
