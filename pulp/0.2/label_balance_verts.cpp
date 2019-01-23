@@ -152,6 +152,7 @@ void label_balance_verts(pulp_graph_t& g, int num_parts, int* parts,
 
   double* part_counts = new double[num_parts];
   double* part_weights = new double[num_parts];
+  double* part_avg_children = new double[num_parts];
 
   int thread_queue[ THREAD_QUEUE_SIZE ];
   int thread_queue_size = 0;
@@ -197,8 +198,10 @@ while(t < vert_outer_iter)
       int v = queue[i];
       in_queue[v] = false;
       int part = parts[v];
-      for (int p = 0; p < num_parts; ++p)
+      for (int p = 0; p < num_parts; ++p) {
         part_counts[p] = 0.0;
+        part_avg_children[p] = 0.0;
+      }
 
       unsigned out_degree = out_degree(g, v);
       int* outs = out_vertices(g, v);
@@ -209,13 +212,22 @@ while(t < vert_outer_iter)
         part_counts[part_out] += out_degree(g, out);
         //part_counts[part_out] += 1.0;//out_degree(g, out);
       }
-      
+
+      // Find average num_children of neighboring vertices per part
+      for (unsigned j = 0; j < out_degree; ++j)
+      {
+        int out = outs[j];
+        int part_out = parts[out];
+        part_avg_children[part_out] += num_children[out] / part_counts[part_out];
+      }
+
       int max_part = part;
       double max_val = 0.0;
       for (int p = 0; p < num_parts; ++p)
       {
         part_counts[p] *= part_weights[p];
-        
+        //part_counts[p] /= part_avg_children[p]; // additional metric
+
         if (part_counts[p] > max_val)
         {
           max_val = part_counts[p];
