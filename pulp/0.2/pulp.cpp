@@ -63,7 +63,7 @@
 
 int seed;
 
-int* connectivity_bfs(pulp_graph_t& g, int num_parts, int* parts)
+int* connectivity_bfs(pulp_graph_t& g, int num_parts, int* parts, bool write_to_file)
 {
   int* conn = new int[g.n]; // connectivity assignments  
   for (int v = 0; v < g.n; ++v)
@@ -130,30 +130,54 @@ int* connectivity_bfs(pulp_graph_t& g, int num_parts, int* parts)
   }
 
   int** part_conn_sizes = (int**) malloc(num_parts*sizeof(int*));
+  int* part_conn_iter = (int*) malloc(num_parts*sizeof(int));
+  int* part_max_size = (int*) malloc(num_parts*sizeof(int));
   for (int p = 0; p < num_parts; ++p) {
     part_conn_sizes[p] = (int*) malloc(part_conns[p]*sizeof(int));
-  }
-
-  int* part_conn_iter = (int*) malloc(num_parts*sizeof(int));
-  for (int p = 0; p < num_parts; ++p) {
     part_conn_iter[p] = 0;
+    part_max_size[p] = 0;
   }
 
+  // Calculate the average size of the small (non-giant) components
+  int num_small_comps = num_comps - num_parts;
+  float avg_small_size = 0.0;
   for (int v = 0; v < g.n; ++v) {
     if (conn[v] == v) {
       int p = parts[v];
       part_conn_sizes[p][part_conn_iter[p]] = conn_sizes[v];
       ++part_conn_iter[p];
+      if (num_small_comps != 0) {
+        if (conn_sizes[v] > part_max_size[p])
+          part_max_size[p] = conn_sizes[v];
+
+        avg_small_size += conn_sizes[v] / (float)num_small_comps;
+      }
     } 
   }
+  for (int p = 0; p < num_parts; ++p) {
+    avg_small_size -= part_max_size[p] / (float)num_small_comps;
+  }
 
-  printf("Total number of components: %d\n", num_comps);
+  printf("Total number of components:       %d\n", num_comps);
+  printf("Average size of small components: %f\n", avg_small_size);
   for (int p = 0; p < num_parts; ++p) {
     printf("  Partition %2d has %4d component(s)\n", p, part_conns[p]);
-    for (int i = 0; i < part_conns[p]; ++i) {
-      printf("%4d  ", part_conn_sizes[p][i]);
+    // Don't output this if we mainly want to write to the file
+    if (!write_to_file) {
+      for (int i = 0; i < part_conns[p]; ++i) {
+        printf("%4d  ", part_conn_sizes[p][i]);
+      }
+      printf("\n");
     }
-    printf("\n");
+  }
+
+  if (write_to_file) {
+    printf("writing to output.csv... ");
+    ofstream output;
+    output.open("output.csv", ios::app);
+    output << num_small_comps << "," << avg_small_size << "\n";
+    output.close();
+    printf("Done\n");
   }
 
   free(visited);
@@ -161,6 +185,9 @@ int* connectivity_bfs(pulp_graph_t& g, int num_parts, int* parts)
   free(next_queue);
   free(part_conns);
   free(conn_sizes);
+  free(part_conn_sizes);
+  free(part_conn_iter);
+  free(part_max_size);
 
   return conn;
 }
@@ -296,7 +323,7 @@ extern "C" int pulp_run(pulp_graph_t* g, pulp_part_control_t* ppc,
     if (verbose) printf("\tFinished outer loop iter %d: %9.6lf(s)\n", (boi+1), elt2);
   
     // Show connectivity details after each iteration
-    connectivity_bfs(*g, num_parts, parts);
+    connectivity_bfs(*g, num_parts, parts, false);
   }
 
   elt = timer() - elt;
@@ -483,9 +510,11 @@ void evaluate_quality(pulp_graph_t& g, int num_parts, int* parts)
   printf("writing to output.csv... ");
   ofstream output;
   output.open("output.csv", ios::app);
-  output << max_overweight_v << "," << edgeCut << "\n";
+  output << max_overweight_v << "," << edgeCut << ",";
   output.close();
   printf("Done\n");
+ 
+  connectivity_bfs(g, num_parts, parts, true); 
 
   for (int i = 0; i < num_parts; ++i)
   {
