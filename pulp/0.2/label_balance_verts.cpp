@@ -123,7 +123,7 @@ void get_cut_overweight(pulp_graph_t& g, int num_parts, int* parts,
  *  The IDs of these comps will be returns via int* merging_comp_ids
  */
 int find_neighbor_part(pulp_graph_t& g, int num_parts, int* parts, int* part_sizes,
-    int* conn_sizes, int c_id, int part, int* conn, int* merging_comp_ids)
+    int* conn_sizes, int c_id, int part, int* conn, int** merging_comp_ids)
 {
   /*  We want a more intelligent way of choosing the neighboring component
    *    to merge, as opposed to just finding the closest one via BFS
@@ -240,21 +240,44 @@ int find_neighbor_part(pulp_graph_t& g, int num_parts, int* parts, int* part_siz
   /*
    * One method:
    *    just pick part of the lowest size (still has to have a neighboring comp) 
-   */
+   */  
+  int min_size = g.n;
+  for (int p = 0; p < num_parts; ++p) {
+    if (min_size > part_sizes[p] && p != part) {
+      min_size = part_sizes[p];
+      chosen_part = p;
+    }
+  }
 
   /*
    * Second method:
    *    pick the part that has the highest number of neighboring components
-   */
+   *
+  int max_comps = 0;
+  for (int p = 0; p < num_parts; ++p) {
+    if (max_comps < num_neighbor_comps[p] && p != part) {
+      max_comps = num_neighbor_comps[p];
+      chosen_part = p;
+    }
+  }
+  */
 
   /*
    * Third method:
    *    pick the part with the highest number of incident edges
-   */
+   *
+  int max_edges = 0;
+  for (int p = 0; p < num_parts; ++p) {
+    if (max_edges < edge_cut_per_part[p] && p != part) {
+      max_edges = edge_cut_per_part[p];
+      chosen_part = p;
+    }
+  }
+  */
 
-  
+  // Return the component ids that will be merged with the chosen part
   if (chosen_part != -1) {
-    merging_comp_ids = neighbor_ids_per_part[chosen_part];
+    *merging_comp_ids = neighbor_ids_per_part[chosen_part];
     num_merging_comps = num_neighbor_comps[chosen_part];
   }
 
@@ -271,7 +294,6 @@ int find_neighbor_part(pulp_graph_t& g, int num_parts, int* parts, int* part_siz
   free(edge_cut_per_part);
   free(queue);
   free(next_queue);
-
   return num_merging_comps;
 }
 
@@ -407,11 +429,11 @@ void merge_small_components(pulp_graph_t& g, int num_parts, int* parts, int* par
           int c_id = part_conn_ids[p][c];
           int part = parts[c_id];
 
-          int* merging_comp_ids;
-          int num_merging_comps = find_neighbor_part(g, num_parts, parts, part_sizes, conn_sizes, c_id, part, conn, merging_comp_ids);
+          int* merging_comp_ids = NULL;
+          int num_merging_comps = find_neighbor_part(g, num_parts, parts, part_sizes, conn_sizes, c_id, part, conn, &merging_comp_ids);
 
           // No neighbor for this component. Merging not possible
-          if (num_merging_comps <= 0)
+          if (num_merging_comps <= 0 || merging_comp_ids == NULL)
             continue;
 
           /* Merge c with these components, which all belong to the same part
@@ -429,7 +451,10 @@ void merge_small_components(pulp_graph_t& g, int num_parts, int* parts, int* par
           queue[0] = c_id;
           queue_size = 1;
           next_size = 0;
-          
+          for (int v = 0; v < g.n; ++v)
+            visited[v] = false;
+          visited[c_id] = true;
+
           while (queue_size) {
             for (int i = 0; i < queue_size; ++i) {
               int vert = queue[i];
@@ -437,7 +462,8 @@ void merge_small_components(pulp_graph_t& g, int num_parts, int* parts, int* par
               for (int j = 0; j < out_degree(g, vert); ++j) {
                 int adj = (out_vertices(g, vert))[j];
                 
-                if (conn[adj] == c_id) {
+                if (!visited[adj] && conn[adj] == c_id) {
+                  visited[adj] = true;
                   parts[adj] = new_part;
                   next_queue[next_size++] = adj;
                 }
@@ -508,6 +534,11 @@ void merge_small_components(pulp_graph_t& g, int num_parts, int* parts, int* par
                 } 
               
               }
+              int* temp = queue;
+              queue = next_queue;
+              next_queue = temp;
+              queue_size = next_size;
+              next_size = 0;
             }
           }
 
@@ -518,6 +549,8 @@ void merge_small_components(pulp_graph_t& g, int num_parts, int* parts, int* par
           num_comps -= num_merging_comps;
           part_sizes[part] -= num_orig_verts;
           part_sizes[new_part] += num_orig_verts;
+        
+          free(merging_comp_ids);
         } // end If 
       } // end c loop
     } // end p loop
