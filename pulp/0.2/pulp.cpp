@@ -192,6 +192,450 @@ int* connectivity_bfs(pulp_graph_t& g, int num_parts, int* parts, bool write_to_
   return conn;
 }
 
+/*
+ *  Find a neighboring component to component c_id,
+ *      which will be merged together.
+ *
+ *  c_id is also the root vertex of this component
+ *      (will be used as the root for BFS)
+ *
+ *  Return the number of neighboring components that will be merged.
+ *  The IDs of these comps will be returns via int* merging_comp_ids
+ */
+int find_neighbor_part(pulp_graph_t& g, int num_parts, int* parts, int* part_sizes,
+    int* conn_sizes, int c_id, int part, int* conn, int** merging_comp_ids)
+{
+  /*  We want a more intelligent way of choosing the neighboring component
+   *    to merge, as opposed to just finding the closest one via BFS
+   *  
+   *  We'll do BFS on the entire component, keeping track of incident
+   *    edges/vertices that do not belong to this component/part.
+   *
+   *  If we see a lot of neighboring components that are different, but
+   *    belong to the same part, it can be beneficial to turn this
+   *    component to belong to that part so that it connects all of them.
+   *
+   *  We should also consider with part within the entire graph is of the
+   *    smallest current size, as merging with that part will best keep
+   *    the vertex-overweightness low.
+   *
+   *  If we see a lot of incident edges for a certain part or component,
+   *    it makes sense to merge with that part/component.
+   *
+   *  So, stats we want to collect before choosing who to merge with:
+   *    Each neighboring component:
+   *        size of that component
+   *        how many times we are incident to that component
+   *    Each part other than this part:
+   *        how many vertices in the graph are in this part
+   *
+   */
+  
+  // neighboring component ids, per part
+  int** neighbor_ids_per_part = (int**) malloc(num_parts * sizeof(int*));
+  // Number of neighboring components per part
+  int* num_neighbor_comps = (int*) malloc(num_parts * sizeof(int));
+  int* max_num_neighbor_comps = (int*) malloc(num_parts * sizeof(int));
+
+  // total sizes of neighboring components per part
+  int* total_neighbor_part_sizes = (int*) malloc(num_parts * sizeof(int));
+  
+  // total number of neighboring incident edges (edge cut) per part
+  int* edge_cut_per_part = (int*) malloc(num_parts * sizeof(int));
+
+  // init
+  for (int p = 0; p < num_parts; ++p) {
+    max_num_neighbor_comps[p] = 2;
+    num_neighbor_comps[p] = 0;
+    neighbor_ids_per_part[p] = (int*) malloc(max_num_neighbor_comps[p] * sizeof(int));
+    total_neighbor_part_sizes[p] = 0;
+    edge_cut_per_part[p] = 0;
+  }
+  
+  // Run BFS
+  bool visited[g.n];
+  for (int v = 0; v < g.n; ++v) {
+    visited[v] = false;
+  }
+  visited[c_id] = true;
+  
+  int* queue = (int*) malloc(g.n * sizeof(int));
+  queue[0] = c_id;
+  int queue_size = 1;
+  
+  int* next_queue = (int*) malloc(g.n * sizeof(int));
+  int next_size = 0;
+  
+  while (queue_size) {
+    for (int i = 0; i < queue_size; ++i) {
+      int vert = queue[i];
+
+      for (int j = 0; j < out_degree(g, vert); ++j) {
+        int adj = (out_vertices(g, vert))[j];
+        if (!visited[adj]) {
+          if (part != parts[adj]) {
+            // adj belongs to a different component
+            ++edge_cut_per_part[parts[adj]];
+            
+            // See if we've already found this component
+            bool found = false;
+            for (int k = 0; k < num_neighbor_comps[parts[adj]]; ++k) {
+              if (neighbor_ids_per_part[parts[adj]][k] == conn[adj])
+                found = true;
+            }
+            // We haven't found this component before, add stats about it
+            if (!found) {
+              // Resize neighboring ID list if needed
+              if (max_num_neighbor_comps[parts[adj]] == num_neighbor_comps[parts[adj]]) {
+                // Resize
+                max_num_neighbor_comps[parts[adj]] *= 2;
+                neighbor_ids_per_part[parts[adj]] = 
+                  (int*) realloc(neighbor_ids_per_part[parts[adj]],
+                      max_num_neighbor_comps[parts[adj]] * sizeof(int));
+              }
+              // Add this component to the ID list
+              neighbor_ids_per_part[parts[adj]][(num_neighbor_comps[parts[adj]])++] = conn[adj];
+              // Add this component's size to the total
+              total_neighbor_part_sizes[parts[adj]] += conn_sizes[conn[adj]];
+            } 
+          } else {
+            next_queue[next_size++] = adj;
+          }
+          visited[adj] = true;
+        }
+      }
+    }
+
+    int* temp = queue;
+    queue = next_queue;
+    next_queue = temp;
+    queue_size = next_size;
+    next_size = 0;
+  }
+ 
+  // Now we have a bunch of stats based on the parts neighboring this one
+  // Decide which part to merge with and return the corresponding neighboring comp ids
+  int chosen_part = -1;
+  int num_merging_comps = -1;
+
+  /*
+   * One method:
+   *    just pick part of the lowest size (still has to have a neighboring comp) 
+   */  
+  int min_size = g.n;
+  for (int p = 0; p < num_parts; ++p) {
+    if (min_size > part_sizes[p] && p != part && num_neighbor_comps[p] > 0) {
+      min_size = part_sizes[p];
+      chosen_part = p;
+    }
+  }
+
+  /*
+   * Second method:
+   *    pick the part that has the highest number of neighboring components
+   *
+  int max_comps = 0;
+  for (int p = 0; p < num_parts; ++p) {
+    if (max_comps < num_neighbor_comps[p] && p != part) {
+      max_comps = num_neighbor_comps[p];
+      chosen_part = p;
+    }
+  }
+  */
+
+  /*
+   * Third method:
+   *    pick the part with the highest number of incident edges
+   *
+  int max_edges = 0;
+  for (int p = 0; p < num_parts; ++p) {
+    if (max_edges < edge_cut_per_part[p] && p != part) {
+      max_edges = edge_cut_per_part[p];
+      chosen_part = p;
+    }
+  }
+  */
+
+  // Return the component ids that will be merged with the chosen part
+  if (chosen_part != -1) {
+    *merging_comp_ids = neighbor_ids_per_part[chosen_part];
+    num_merging_comps = num_neighbor_comps[chosen_part];
+  }
+
+  // Free memory
+  for (int p = 0; p < num_parts; ++p) {
+    if (p == chosen_part)
+      continue;
+    free(neighbor_ids_per_part[p]);
+  }
+  free(neighbor_ids_per_part);
+  free(max_num_neighbor_comps);
+  free(num_neighbor_comps);
+  free(total_neighbor_part_sizes);
+  free(edge_cut_per_part);
+  free(queue);
+  free(next_queue);
+  return num_merging_comps;
+}
+
+void merge_small_components(pulp_graph_t& g, int num_parts, int* parts)
+{
+  // Keep track of part_sizes
+  //   Normally this is already done during balance and refine
+  //   If merging small components is done other than at the end
+  //     of everything, then this may have to be changed.
+  int* part_sizes = (int*) malloc(num_parts * sizeof(int));
+  for (int p = 0; p < num_parts; ++p)
+    part_sizes[p] = 0;
+  
+  int* conn = new int[g.n]; // connectivity assignments  
+  for (int v = 0; v < g.n; ++v)
+    conn[v] = -1;
+
+  // number of connected components per part
+  int* part_conns = (int*)malloc(num_parts*sizeof(int));
+  for (int p = 0; p < num_parts; ++p)
+    part_conns[p] = 0;
+
+  // Store the size of each component at the root vertex
+  int* conn_sizes = (int*) malloc(g.n*sizeof(int));
+  for (int v = 0; v < g.n; ++v) {
+    conn_sizes[v] = -1;
+  }
+
+  // Track size of largest component in each part
+  int* max_conn_sizes = (int*) malloc(num_parts*sizeof(int));
+  for (int p = 0; p < num_parts; ++p) {
+    max_conn_sizes[p] = 0;
+  }
+
+  int* queue = (int*)malloc(g.n*sizeof(int));
+  int* next_queue = (int*)malloc(g.n*sizeof(int));
+  int queue_size = 0;
+  int next_size = 0;
+  int conn_size = 0;
+
+  bool* visited = (bool*)malloc(g.n*sizeof(int));
+  for (int v = 0; v < g.n; ++v)
+    visited[v] = false;
+
+  int num_comps = 0;
+
+  for (int v = 0; v < g.n; ++v) {
+    if (!visited[v]) {
+      visited[v] = true;
+      conn[v] = v;
+      queue[0] = v;
+      queue_size = 1;
+      next_size = 0;
+      conn_size = 1;
+      ++part_sizes[parts[v]];
+
+      while (queue_size) {
+        for (int i = 0; i < queue_size; ++i) {
+          int vert = queue[i];
+
+          for (int j = 0; j < out_degree(g, vert); ++j) {
+      	    int adj = (out_vertices(g, vert))[j];
+            if (!visited[adj] && (parts[adj]==parts[v])) {
+              visited[adj] = true;
+              next_queue[next_size++] = adj;
+              conn[adj] = v;
+	          ++conn_size;
+              ++part_sizes[parts[v]];
+            }
+          }
+        }
+
+        int* temp = queue;
+        queue = next_queue;
+        next_queue = temp;
+        queue_size = next_size;
+        next_size = 0;
+      }
+
+      // Update max component size for the part
+      if (conn_size > max_conn_sizes[parts[v]])
+        max_conn_sizes[parts[v]] = conn_size;
+      // increment number of components for the part
+      ++part_conns[parts[v]];
+
+      conn_sizes[v] = conn_size;
+      ++num_comps;
+    }
+  }
+
+  // Per part, store component IDs and sizes
+  int** part_conn_ids = (int**) malloc(num_parts*sizeof(int*));
+  int** part_conn_sizes = (int**) malloc(num_parts*sizeof(int*));
+  for (int p = 0; p < num_parts; ++p) {
+    part_conn_ids[p] = (int*) malloc(part_conns[p]*sizeof(int));
+    part_conn_sizes[p] = (int*) malloc(part_conns[p]*sizeof(int));
+  }
+
+  int* part_conn_iter = (int*) malloc(num_parts*sizeof(int));
+  for (int p = 0; p < num_parts; ++p) {
+    part_conn_iter[p] = 0;
+  }
+
+  for (int v = 0; v < g.n; ++v) {
+    if (conn[v] == v) {
+      int p = parts[v];
+      part_conn_ids[p][part_conn_iter[p]] = v;
+      part_conn_sizes[p][part_conn_iter[p]] = conn_sizes[v];
+      ++part_conn_iter[p];
+    } 
+  }
+
+  // Merge all small components until desired number of parts is reached
+  int max_iters = 10;
+  int iter = 0;
+  while (num_comps > num_parts && iter < max_iters) {
+    // Iterate over each component in each part
+    for (int p = 0; p < num_parts; ++p) {
+      for (int c = 0; c < part_conns[p]; ++c) {
+        // Only merge components smaller than the largest one in their part
+        //  and if they have not already been merged
+        if (part_conn_sizes[p][c] < max_conn_sizes[p] &&
+            part_conn_sizes[p][c] > 0) {
+          int c_id = part_conn_ids[p][c];
+          int part = parts[c_id];
+
+          int* merging_comp_ids = NULL;
+          int num_merging_comps = find_neighbor_part(g, num_parts, parts, part_sizes, conn_sizes, c_id, part, conn, &merging_comp_ids);
+
+          // No neighbor for this component. Merging not possible
+          if (num_merging_comps <= 0 || merging_comp_ids == NULL)
+            continue;
+          
+          /* Merge c with these components, which all belong to the same part
+           *    All these neighboring components will effectively merge with
+           *    the main component. So, each of them will be relabeled to have
+           *    connectivity c_id, and the size of c_id will increase by the
+           *    sizes of all these neighbors' sizes.
+           *    The number of components will decrease by num_merging_comps.
+           */
+
+          int new_part = parts[merging_comp_ids[0]];
+          parts[c_id] = new_part;
+
+          // BFS to change parts[]
+          queue[0] = c_id;
+          queue_size = 1;
+          next_size = 0;
+          for (int v = 0; v < g.n; ++v)
+            visited[v] = false;
+          visited[c_id] = true;
+
+          while (queue_size) {
+            for (int i = 0; i < queue_size; ++i) {
+              int vert = queue[i];
+              
+              for (int j = 0; j < out_degree(g, vert); ++j) {
+                int adj = (out_vertices(g, vert))[j];
+                
+                if (!visited[adj] && conn[adj] == c_id) {
+                  visited[adj] = true;
+                  parts[adj] = new_part;
+                  next_queue[next_size++] = adj;
+                }
+              }
+            }
+            int* temp = queue;
+            queue = next_queue;
+            next_queue = temp;
+            queue_size = next_size;
+            next_size = 0;
+          }
+
+          // Total up size of the new merged component
+          int num_orig_verts = part_conn_sizes[p][c];
+          int total_merged_size = num_orig_verts;
+          
+          /* For each merging component,
+           *    update part_conn_ids[] and part_conn_sizes[]
+           *    and run BFS to change conn[]
+           */
+          for (int mc = 0; mc < num_merging_comps; ++mc) {
+            // mc_id is the root of this component
+            int mc_id = merging_comp_ids[mc];
+
+            // Find this id in part_conn_ids[] to update part_conn_sizes[]
+            for (int cc = 0; cc < part_conns[new_part]; ++cc) {
+              if (part_conn_ids[new_part][cc] == mc_id) {
+                total_merged_size += part_conn_sizes[new_part][cc];
+                
+                // If this is the last merging component, have its index
+                //  be taken over by the overall merged component
+                if (mc == num_merging_comps - 1) {
+                  part_conn_sizes[new_part][cc] = total_merged_size;
+                  part_conn_sizes[p][c] = 0;
+                  part_conn_ids[new_part][cc] = c_id;
+                  part_conn_ids[p][c] = mc_id;
+
+                  // Update max comp size if necessary
+                  if (total_merged_size > max_conn_sizes[new_part]) {
+                    max_conn_sizes[new_part] = total_merged_size;
+                  }
+                
+                } else {
+                  part_conn_sizes[new_part][cc] = 0;
+                }
+                
+                break;
+              }
+            }
+
+            // BFS
+            conn[mc_id] = c_id;
+            queue[0] = mc_id;
+            queue_size = 1;
+            next_size = 0;
+            
+            while (queue_size) {
+              for (int i = 0; i < queue_size; ++i) {
+                int vert = queue[i];
+                
+                for (int j = 0; j < out_degree(g, vert); ++j) {
+                  int adj = (out_vertices(g,vert))[j];
+
+                  if (conn[adj] == mc_id) {
+                    conn[adj] = c_id;
+                    next_queue[next_size++] = adj;
+                  }
+                } 
+              
+              }
+              int* temp = queue;
+              queue = next_queue;
+              next_queue = temp;
+              queue_size = next_size;
+              next_size = 0;
+            }
+          }
+
+          /* 
+           * Merging is done, update number of comps
+           *  and part_sizes
+           */
+          num_comps -= num_merging_comps;
+          part_sizes[part] -= num_orig_verts;
+          part_sizes[new_part] += num_orig_verts;
+        
+          free(merging_comp_ids);
+        } // end If 
+      } // end c loop
+    } // end p loop
+    ++iter;
+  } // end while
+
+  free(visited);
+  free(queue);
+  free(next_queue);
+  free(part_conns);
+  free(conn_sizes);
+  free(part_sizes);
+}
 
 extern "C" int pulp_run(pulp_graph_t* g, pulp_part_control_t* ppc, 
           int* parts, int num_parts)
@@ -246,7 +690,9 @@ extern "C" int pulp_run(pulp_graph_t* g, pulp_part_control_t* ppc,
     elt2 = timer() - elt2;
     if (verbose) printf("done: %9.6lf(s)\n", elt2);
   }
-
+  
+  // SINGLE THREADED ####################
+  omp_set_num_threads(1);
 
   if (verbose) printf("\tBeginning vertex (and edge) refinement\n");
   for (int boi = 0; boi < balance_outer_iter; ++boi)
@@ -325,6 +771,12 @@ extern "C" int pulp_run(pulp_graph_t* g, pulp_part_control_t* ppc,
     // Show connectivity details after each iteration
     connectivity_bfs(*g, num_parts, parts, false);
   }
+
+  // Merge smaller components in each part so that each part is as connected
+  //  as possible:
+  merge_small_components(*g, num_parts, parts); 
+
+  connectivity_bfs(*g, num_parts, parts, false);
 
   elt = timer() - elt;
   if (verbose) printf("Partitioning finished: %9.6lf(s)\n", elt);
