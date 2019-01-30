@@ -61,6 +61,9 @@
 
 int seed;
 
+/*
+ *  Run BFS to obtain each component in each part.
+ */
 int* connectivity_bfs(pulp_graph_t& g, int num_parts, int* parts)
 {
   int* conn = new int[g.n]; // connectivity assignments  
