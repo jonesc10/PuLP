@@ -218,9 +218,10 @@ int find_neighbor_part(pulp_graph_t& g, int num_parts, int* parts, int* part_siz
               // Add this component's size to the total
               total_neighbor_part_sizes[parts[adj]] += conn_sizes[conn[adj]];
             } 
+          } else {
+            next_queue[next_size++] = adj;
           }
           visited[adj] = true;
-          next_queue[next_size++] = adj;
         }
       }
     }
