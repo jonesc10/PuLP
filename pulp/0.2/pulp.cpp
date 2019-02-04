@@ -63,6 +63,8 @@
 
 int seed;
 
+#define csvfilename "output-google_oc-inv_children-merge_partsize.csv"
+
 int* connectivity_bfs(pulp_graph_t& g, int num_parts, int* parts, bool write_to_file)
 {
   int* conn = new int[g.n]; // connectivity assignments  
@@ -154,8 +156,10 @@ int* connectivity_bfs(pulp_graph_t& g, int num_parts, int* parts, bool write_to_
       }
     } 
   }
-  for (int p = 0; p < num_parts; ++p) {
-    avg_small_size -= part_max_size[p] / (float)num_small_comps;
+  if (num_small_comps != 0) {
+    for (int p = 0; p < num_parts; ++p) {
+      avg_small_size -= part_max_size[p] / (float)num_small_comps;
+    }
   }
 
   printf("Total number of components:       %d\n", num_comps);
@@ -172,9 +176,9 @@ int* connectivity_bfs(pulp_graph_t& g, int num_parts, int* parts, bool write_to_
   }
 
   if (write_to_file) {
-    printf("writing to output.csv... ");
+    printf("writing to %s... ", csvfilename);
     ofstream output;
-    output.open("output.csv", ios::app);
+    output.open(csvfilename, ios::app);
     output << num_small_comps << "," << avg_small_size << "\n";
     output.close();
     printf("Done\n");
@@ -959,9 +963,9 @@ void evaluate_quality(pulp_graph_t& g, int num_parts, int* parts)
   printf("CommVol overweight: %9.3lf, max: %u\n", max_overweight_cv, max_comm_size);
   printf("EdgeCut overweight: %9.3lf, max: %u\n", max_overweight_ec, max_edge_cut);
 
-  printf("writing to output.csv... ");
+  printf("writing to %s... ", csvfilename);
   ofstream output;
-  output.open("output.csv", ios::app);
+  output.open(csvfilename, ios::app);
   output << max_overweight_v << "," << edgeCut << ",";
   output.close();
   printf("Done\n");
