@@ -113,6 +113,19 @@ void get_cut_overweight(pulp_graph_t& g, int num_parts, int* parts,
 }
 
 /*
+ * Find the true connectivity of vertex v
+ * Which may not be equal to just conn[v] due to
+ *   being in the middle of merging.
+ */
+int true_conn(int v, int* conn)
+{
+  while (v != conn[v]) {
+    v = conn[v];
+  }
+  return v;
+}
+
+/*
  *  Find a neighboring component to component c_id,
  *      which will be merged together.
  *
@@ -197,10 +210,12 @@ int find_neighbor_part(pulp_graph_t& g, int num_parts, int* parts, int* part_siz
             // adj belongs to a different component
             ++edge_cut_per_part[parts[adj]];
             
+            int adj_c_id = true_conn(adj, conn);
+
             // See if we've already found this component
             bool found = false;
             for (int k = 0; k < num_neighbor_comps[parts[adj]]; ++k) {
-              if (neighbor_ids_per_part[parts[adj]][k] == conn[adj])
+              if (neighbor_ids_per_part[parts[adj]][k] == adj_c_id)
                 found = true;
             }
             // We haven't found this component before, add stats about it
@@ -214,9 +229,9 @@ int find_neighbor_part(pulp_graph_t& g, int num_parts, int* parts, int* part_siz
                       max_num_neighbor_comps[parts[adj]] * sizeof(int));
               }
               // Add this component to the ID list
-              neighbor_ids_per_part[parts[adj]][num_neighbor_comps[parts[adj]]++] = conn[adj];
+              neighbor_ids_per_part[parts[adj]][num_neighbor_comps[parts[adj]]++] = adj_c_id;
               // Add this component's size to the total
-              total_neighbor_part_sizes[parts[adj]] += conn_sizes[conn[adj]];
+              total_neighbor_part_sizes[parts[adj]] += conn_sizes[adj_c_id];
             } 
           } else {
             next_queue[next_size++] = adj;
@@ -452,9 +467,6 @@ void merge_small_components(pulp_graph_t& g, int num_parts, int* parts, int* par
           queue[0] = c_id;
           queue_size = 1;
           next_size = 0;
-          for (int v = 0; v < g.n; ++v)
-            visited[v] = false;
-          visited[c_id] = true;
 
           while (queue_size) {
             for (int i = 0; i < queue_size; ++i) {
@@ -463,8 +475,7 @@ void merge_small_components(pulp_graph_t& g, int num_parts, int* parts, int* par
               for (int j = 0; j < out_degree(g, vert); ++j) {
                 int adj = (out_vertices(g, vert))[j];
                 
-                if (!visited[adj] && conn[adj] == c_id) {
-                  visited[adj] = true;
+                if (parts[adj] == part) {
                   parts[adj] = new_part;
                   next_queue[next_size++] = adj;
                 }
@@ -483,7 +494,7 @@ void merge_small_components(pulp_graph_t& g, int num_parts, int* parts, int* par
           
           /* For each merging component,
            *    update part_conn_ids[] and part_conn_sizes[]
-           *    and run BFS to change conn[]
+           *    and update true connectivity
            */
           for (int mc = 0; mc < num_merging_comps; ++mc) {
             // mc_id is the root of this component
@@ -515,32 +526,8 @@ void merge_small_components(pulp_graph_t& g, int num_parts, int* parts, int* par
               }
             }
 
-            // BFS
-            conn[mc_id] = c_id;
-            queue[0] = mc_id;
-            queue_size = 1;
-            next_size = 0;
-            
-            while (queue_size) {
-              for (int i = 0; i < queue_size; ++i) {
-                int vert = queue[i];
-                
-                for (int j = 0; j < out_degree(g, vert); ++j) {
-                  int adj = (out_vertices(g,vert))[j];
-
-                  if (conn[adj] == mc_id) {
-                    conn[adj] = c_id;
-                    next_queue[next_size++] = adj;
-                  }
-                } 
-              
-              }
-              int* temp = queue;
-              queue = next_queue;
-              next_queue = temp;
-              queue_size = next_size;
-              next_size = 0;
-            }
+            // Set connectivity id of mc_id to be c_id
+            conn[true_conn(mc_id, conn)] = c_id;
           }
 
           /* 
