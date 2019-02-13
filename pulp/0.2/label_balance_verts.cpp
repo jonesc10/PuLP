@@ -485,6 +485,14 @@ void label_balance_verts_weighted(
   int t = 0;
   int num_tries = 0;
 
+  bool articulation_off = false;
+  biconnected* bc = new biconnected(g, parts);
+  printf("Articulation count: %7d\n", bc->get_articulation_count(g));
+ 
+  // every bc_rate swapped vertices, recalculate biconnectivity
+  int bc_rate = 10000;
+  int swapped_counter = 0; 
+
 #pragma omp parallel
 {
   long* part_sizes_thread = new long[num_parts];
@@ -576,7 +584,7 @@ while(t < vert_outer_iter)
         }
       }
 
-      if (max_part != part)
+      if (max_part != part && (articulation_off || !bc->is_articulation(v)))
       {
         parts[v] = max_part;
         ++num_swapped_1;
@@ -585,6 +593,15 @@ while(t < vert_outer_iter)
     #pragma omp atomic
         part_sizes[part] -= v_weight;
         
+        // Potentially recalculate biconnectivity
+        if (++swapped_counter == bc_rate)
+        {
+          swapped_counter = 0;
+          delete bc;
+          bc = new biconnected(g, parts);
+          printf("Articulation count: %7d  --  Balance\n", bc->get_articulation_count(g));
+        }
+
         part_weights[part] = vert_balance * avg_size / (double)part_sizes[part] - 1.0;
         part_weights[max_part] = vert_balance * avg_size / (double)part_sizes[max_part]  - 1.0;   
         
@@ -711,7 +728,7 @@ while(t < vert_outer_iter)
           max_part = p;
         }
 
-      if (max_part != part)
+      if (max_part != part && (articulation_off || !bc->is_articulation(v)))
       {
         double new_max_imb = (double)(part_sizes[max_part] + v_weight) / avg_size;
         if (new_max_imb < vert_balance)
@@ -722,6 +739,15 @@ while(t < vert_outer_iter)
           part_sizes[max_part] += v_weight;
       #pragma omp atomic
           part_sizes[part] -= v_weight;
+       
+          // Potentially recalculate biconnectivity
+          if (++swapped_counter == bc_rate)
+          {
+            swapped_counter = 0;
+            delete bc;
+            bc = new biconnected(g, parts);
+            printf("Articulation count: %7d  --          Refine\n", bc->get_articulation_count(g));
+          }
 
           if (!in_queue_next[v])
           {
@@ -830,5 +856,6 @@ while(t < vert_outer_iter)
   delete [] queue_next;
   delete [] in_queue;
   delete [] in_queue_next;
+  delete bc;
 }
 
