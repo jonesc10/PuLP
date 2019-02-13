@@ -504,6 +504,10 @@ while(t < vert_outer_iter)
 
   delete [] part_counts;
   delete [] part_weights;
+  delete [] part_avg_children;
+  delete [] num_children;
+  delete [] parents;
+  delete [] levels;
 
 } // end par
 
