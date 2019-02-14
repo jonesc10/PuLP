@@ -321,22 +321,23 @@ while(t < vert_outer_iter)
         }
         // Adjust num_children, parents and levels
         if (adj != -1) {
-          if (parents[v] != -1)
-	    --(num_children[parents[v]]);
+          if (parents[v] != -1) {
+	        --(num_children[parents[v]]);
+          }
           parents[v] = adj;
           ++(num_children[adj]);
           levels[v] = levels[adj] + 1;
 
-	  // If v was not a leaf, adjust its previous children
-	  if (num_children[v] != 0) {
-	    for (unsigned j = 0; j < out_degree; ++j)
-	    {
-	      if (parents[outs[j]] == v)
-		parents[outs[j]] = -1;
-	    }
-	  }
+          // If v was not a leaf, adjust its previous children
+          if (num_children[v] != 0) {
+            for (unsigned j = 0; j < out_degree; ++j) {
+              if (parents[outs[j]] == v) {
+                parents[outs[j]] = -1;
+              }
+            }
+          }
 
-	  num_children[v] = 0;
+	      num_children[v] = 0;
         } else {
           printf("ERROR: vertex changing parts without adjacent vertex\n");
         }
@@ -486,22 +487,23 @@ while(t < vert_outer_iter)
           }
           // Adjust num_children, parents and levels
           if (adj != -1) {
-            if (parents[v] != -1)
-	      --(num_children[parents[v]]);
+            if (parents[v] != -1) {
+	          --(num_children[parents[v]]);
+            }
             parents[v] = adj;
             ++(num_children[adj]);
             levels[v] = levels[adj] + 1;
   
-	    // If v was not a leaf, adjust its previous children
-	    if (num_children[v] != 0) {
-	      for (unsigned j = 0; j < out_degree; ++j)
-	      {
-	        if (parents[outs[j]] == v)
-		  parents[outs[j]] = -1;
-	      }
-	    }
+	        // If v was not a leaf, adjust its previous children
+	        if (num_children[v] != 0) {
+	          for (unsigned j = 0; j < out_degree; ++j) {
+	            if (parents[outs[j]] == v) {
+		          parents[outs[j]] = -1;
+                }
+	          }
+	        }
 
-	    num_children[v] = 0;
+	        num_children[v] = 0;
           } else {
             printf("ERROR: vertex changing parts without adjacent vertex\n");
           }
@@ -699,6 +701,11 @@ void label_balance_verts_weighted(
     if (part_weights[p] < 0.0)
       part_weights[p] = 0.0;
   }
+  
+  int* num_children = new int[num_verts];
+  int* parents = new int[num_verts];
+  int* levels = new int[num_verts];
+  init_bfs_trees(g, num_parts, parts, num_children, parents, levels);
 
 while(t < vert_outer_iter)
 {
@@ -757,8 +764,42 @@ while(t < vert_outer_iter)
         }
       }
 
-      if (max_part != part)
+      if (max_part != part && num_children[v] <= MAX_NUM_CHILDREN)
       {
+        // Find vertex in max_part adjacent to v on lowest level
+        int min_level = num_verts;
+        int adj = -1;
+        for (unsigned j = 0; j < out_degree; ++j)
+        {
+          if (parts[outs[j]]==max_part && levels[outs[j]] < min_level)
+          {
+            adj = outs[j];
+            min_level = levels[adj];
+          }
+        }
+        // Adjust num_children, parents and levels
+        if (adj != -1) {
+          if (parents[v] != -1) {
+	        --(num_children[parents[v]]);
+          }
+          parents[v] = adj;
+          ++(num_children[adj]);
+          levels[v] = levels[adj] + 1;
+
+          // If v was not a leaf, adjust its previous children
+          if (num_children[v] != 0) {
+            for (unsigned j = 0; j < out_degree; ++j) {
+              if (parents[outs[j]] == v) {
+                parents[outs[j]] = -1;
+              }
+            }
+          }
+
+	      num_children[v] = 0;
+        } else {
+          printf("ERROR: vertex changing parts without adjacent vertex\n");
+        }
+        
         parts[v] = max_part;
         ++num_swapped_1;
     #pragma omp atomic
@@ -892,11 +933,45 @@ while(t < vert_outer_iter)
           max_part = p;
         }
 
-      if (max_part != part)
+      if (max_part != part && num_children[v] <= MAX_NUM_CHILDREN)
       {
         double new_max_imb = (double)(part_sizes[max_part] + v_weight) / avg_size;
-        if (new_max_imb < vert_balance)
+        if ( new_max_imb < vert_balance)
         {
+          // Find vertex in max_part adjacent to v on lowest level
+          int min_level = num_verts;
+          int adj = -1;
+          for (unsigned j = 0; j < out_degree; ++j)
+          {
+            if (parts[outs[j]]==max_part && levels[outs[j]] < min_level)
+            {
+              adj = outs[j];
+              min_level = levels[adj];
+            }
+          }
+          // Adjust num_children, parents and levels
+          if (adj != -1) {
+            if (parents[v] != -1) {
+	          --(num_children[parents[v]]);
+            }
+            parents[v] = adj;
+            ++(num_children[adj]);
+            levels[v] = levels[adj] + 1;
+  
+	        // If v was not a leaf, adjust its previous children
+	        if (num_children[v] != 0) {
+	          for (unsigned j = 0; j < out_degree; ++j) {
+	            if (parents[outs[j]] == v) {
+		          parents[outs[j]] = -1;
+                }
+	          }
+	        }
+
+	        num_children[v] = 0;
+          } else {
+            printf("ERROR: vertex changing parts without adjacent vertex\n");
+          }
+          
           ++num_swapped_2;
           parts[v] = max_part;
       #pragma omp atomic
