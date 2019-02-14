@@ -232,6 +232,14 @@ int main(int argc, char** argv)
     printf("writing parts file %s ... ", temp_out);
     elt = timer();
     write_parts(temp_out, g.n, parts);
+    bool write_csv_file = true;
+    if (write_csv_file)
+    {
+      strcat(temp_out, ".csv");
+      write_csv(temp_out, g.n, parts);
+      strcat(temp_out, "t");
+      write_csvt(temp_out);
+    }
     elt = timer() - elt;
     printf("Done: %9.6lf\n", elt);
 
