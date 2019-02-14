@@ -132,3 +132,33 @@ void write_parts(char* filename, int num_verts, int* parts)
 
   outfile.close();
 }
+
+/*
+ * Create .csv file to be imported into QGIS
+ */
+void write_csv(char* filename, int num_verts, int* parts)
+{
+  ofstream outfile;
+  outfile.open(filename);
+  
+  outfile << "uid,PART" << endl;
+
+  for (int i = 0; i < num_verts; ++i)
+  {
+    outfile << i+1 << "," << parts[i] << endl;   
+  }
+  outfile.close();
+}
+
+/*
+ * Create csvt file to be alongside csv file
+ */
+void write_csvt(char* filename)
+{
+  ofstream outfile;
+  outfile.open(filename);
+
+  outfile << "\"Integer\", \"Integer\"" << endl;
+
+  outfile.close();
+}
