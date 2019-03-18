@@ -251,7 +251,7 @@ int* label_prop(pulp_graph_t& g, int num_parts, int* parts,
 
 
 int* label_prop_weighted(pulp_graph_t& g, int num_parts, int* parts,
-  int label_prop_iter, double balance_vert_lower)
+  int label_prop_iter, double balance_vert_lower, int current_vert_weight=0)
 {
   int num_verts = g.n;  
   bool has_vwgts = (g.vertex_weights != NULL);
@@ -289,7 +289,7 @@ int* label_prop_weighted(pulp_graph_t& g, int num_parts, int* parts,
 #pragma omp for schedule(static) nowait
   for (int i = 0; i < num_verts; ++i)
     if (has_vwgts)
-      part_sizes_thread[parts[i]] += g.vertex_weights[i];
+      part_sizes_thread[parts[i]] += g.vertex_weights[current_vert_weight][i];
     else 
       ++part_sizes_thread[parts[i]];
 
@@ -320,7 +320,7 @@ int* label_prop_weighted(pulp_graph_t& g, int num_parts, int* parts,
     {
       int v = queue[i];
       int v_weight = 1;
-      if (has_vwgts) v_weight = g.vertex_weights[v];
+      if (has_vwgts) v_weight = g.vertex_weights[current_vert_weight][v];
 
       in_queue[v] = false;
       for (int j = 0; j < num_parts; ++j)

@@ -429,7 +429,7 @@ while(t < vert_outer_iter)
 void label_balance_verts_weighted(
   pulp_graph_t& g, int num_parts, int* parts,
   int vert_outer_iter, int vert_balance_iter, int vert_refine_iter,
-  double vert_balance)
+  double vert_balance, int current_vert_weight = 0)
 {
   int num_verts = g.n;
   long* part_sizes = new long[num_parts];
@@ -465,7 +465,7 @@ void label_balance_verts_weighted(
 #pragma omp for schedule(static) nowait
   for (int i = 0; i < num_verts; ++i)
     if (has_vwgts)
-      part_sizes_thread[parts[i]] += g.vertex_weights[i];
+      part_sizes_thread[parts[i]] += g.vertex_weights[current_vert_weight][i];
     else
       ++part_sizes_thread[parts[i]];
 
@@ -517,7 +517,7 @@ while(t < vert_outer_iter)
       in_queue[v] = false;
       int part = parts[v];
       int v_weight = 1;
-      if (has_vwgts) v_weight = g.vertex_weights[v];
+      if (has_vwgts) v_weight = g.vertex_weights[current_vert_weight][v];
 
       for (int p = 0; p < num_parts; ++p)
         part_counts[p] = 0.0;
@@ -656,7 +656,7 @@ while(t < vert_outer_iter)
       in_queue[v] = false;      
       int part = parts[v];
       int v_weight = 1;
-      if (has_vwgts) v_weight = g.vertex_weights[v];
+      if (has_vwgts) v_weight = g.vertex_weights[current_vert_weight][v];
 
       for (int p = 0; p < num_parts; ++p)
         part_counts[p] = 0;

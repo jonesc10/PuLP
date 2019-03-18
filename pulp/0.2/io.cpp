@@ -1,8 +1,8 @@
 
 void read_adj(char* filename, int& n, long& m,
   int*& out_array, long*& out_degree_list,
-  bool has_vert_weights, bool has_edge_weights,
-  int*& vertex_weights, int*& edge_weights, long& vertex_weights_sum)
+  bool has_vert_weights, bool has_edge_weights, int& num_vertex_weights,
+  int**& vertex_weights, int*& edge_weights, long& vertex_weights_sum)
 {
   ifstream infile;
   string line;
@@ -10,7 +10,14 @@ void read_adj(char* filename, int& n, long& m,
 
   out_array = new int[m];
   out_degree_list = new long[n+1];
-  if (has_vert_weights || has_edge_weights) vertex_weights = new int[n];
+  if (has_vert_weights || has_edge_weights)
+  {
+    vertex_weights = new int*[num_vertex_weights];
+    for (int i = 0; i < num_vertex_weights; ++i)
+    {
+      vertex_weights[i] = new int[n];
+    }
+  }
   else vertex_weights = NULL;
   if (has_edge_weights || has_vert_weights) edge_weights = new int[m];
   else edge_weights = NULL;
@@ -32,19 +39,23 @@ void read_adj(char* filename, int& n, long& m,
     out_degree_list[cur_vert] = count;
     if (has_vert_weights)
     {
-      getline(ss, val, ' ');
-      vertex_weights[cur_vert] = atoi(val.c_str());
-      vertex_weights_sum += vertex_weights[cur_vert];
+      for (int i = 0; i < num_vertex_weights; ++i)
+      {
+        getline(ss, val, ' ');
+        vertex_weights[i][cur_vert] = atoi(val.c_str());
+        // TODO: should sum be for different weights?
+        vertex_weights_sum += vertex_weights[i][cur_vert];
+      }
     }
     else if (has_edge_weights)
     {
-      vertex_weights[cur_vert] = 1;
-      vertex_weights_sum += vertex_weights[cur_vert];
+      vertex_weights[0][cur_vert] = 1;
+      vertex_weights_sum += vertex_weights[0][cur_vert];
     }
     /*else
     {
-      vertex_weights[cur_vert] = rand() % 10;
-      vertex_weights_sum += vertex_weights[cur_vert];
+      vertex_weights[0][cur_vert] = rand() % 10;
+      vertex_weights_sum += vertex_weights[0][cur_vert];
     }*/
     ++cur_vert;
 
@@ -75,8 +86,8 @@ void read_adj(char* filename, int& n, long& m,
 }
 
 void read_graph(char* filename, int& n, long& m,
-  int*& out_array, long*& out_degree_list,
-  int*& vertex_weights, int*& edge_weights, long& vertex_weights_sum)
+  int*& out_array, long*& out_degree_list, int& num_vertex_weights,
+  int**& vertex_weights, int*& edge_weights, long& vertex_weights_sum)
 {
   ifstream infile;
   string line;
@@ -84,7 +95,7 @@ void read_graph(char* filename, int& n, long& m,
 
   infile.open(filename);
   getline(infile, line); printf("%s\n", line.c_str());
-  sscanf(line.c_str(), "%d %li %d", &n, &m, &format);
+  sscanf(line.c_str(), "%d %li %d %d", &n, &m, &format, &num_vertex_weights);
   m *= 2;
   infile.close();
 
@@ -102,7 +113,7 @@ void read_graph(char* filename, int& n, long& m,
   }
 
   read_adj(filename, n, m, out_array, out_degree_list,
-    has_vert_weights, has_edge_weights,
+    has_vert_weights, has_edge_weights, num_vertex_weights,
     vertex_weights, edge_weights, vertex_weights_sum);
 }
 

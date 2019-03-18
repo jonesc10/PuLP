@@ -179,7 +179,7 @@ extern "C" int pulp_run(pulp_graph_t* g, pulp_part_control_t* ppc,
   bool do_vert_balance = true;
   bool do_edge_balance = ppc->do_edge_balance;
   bool do_maxcut_balance = ppc->do_maxcut_balance;
-  int balance_outer_iter = 1;
+  int balance_outer_iter = 8;
   int label_prop_iter = 3;
   int vert_outer_iter = 3;
   int vert_balance_iter = 5;
@@ -206,8 +206,9 @@ extern "C" int pulp_run(pulp_graph_t* g, pulp_part_control_t* ppc,
   {
     if (verbose) printf("\tDoing (weighted) label prop stage with %d parts\n", num_parts);
     elt2 = timer();
-    label_prop_weighted(*g, num_parts, parts, 
-      label_prop_iter, vert_balance_lower);
+    for (int w = 0; w < g->num_vertex_weights; ++w)
+      label_prop_weighted(*g, num_parts, parts, 
+        label_prop_iter, vert_balance_lower, w);
     elt2 = timer() - elt2;
     if (verbose) printf("done: %9.6lf(s)\n", elt2);
   }
@@ -240,9 +241,10 @@ extern "C" int pulp_run(pulp_graph_t* g, pulp_part_control_t* ppc,
     {
       if (verbose) printf("\t\tDoing (weighted) vert balance and refinement stage\n");
       elt3 = timer(); 
-      label_balance_verts_weighted(*g, num_parts, parts,
-        vert_outer_iter, vert_balance_iter, vert_refine_iter,
-        vert_balance);
+      for (int w = 0; w < g->num_vertex_weights; ++w)
+        label_balance_verts_weighted(*g, num_parts, parts,
+          vert_outer_iter, vert_balance_iter, vert_refine_iter,
+          vert_balance, w);
       elt3 = timer() - elt3;
       if (verbose) printf("done: %9.6lf(s)\n", elt3);
     }
@@ -274,9 +276,10 @@ extern "C" int pulp_run(pulp_graph_t* g, pulp_part_control_t* ppc,
     {
       if (verbose) printf("\t\tDoing (weighted) edge balance and refinement stage\n");
       elt3 = timer();
-      label_balance_edges_weighted(*g, num_parts, parts,
-        edge_outer_iter, edge_balance_iter, edge_refine_iter,
-        vert_balance, edge_balance);
+      for (int w = 0; w < g->num_vertex_weights; ++w)
+        label_balance_edges_weighted(*g, num_parts, parts,
+          edge_outer_iter, edge_balance_iter, edge_refine_iter,
+          vert_balance, edge_balance, w);
       elt3 = timer() - elt3;
       if (verbose) printf("done: %9.6lf(s)\n", elt3);
     }    
@@ -285,9 +288,10 @@ extern "C" int pulp_run(pulp_graph_t* g, pulp_part_control_t* ppc,
     {
       if (verbose) printf("\t\tDoing (weighted) maxcut balance and refinement stage\n");
       elt3 = timer();
-      label_balance_edges_maxcut_weighted(*g, num_parts, parts,
-        edge_outer_iter, edge_balance_iter, edge_refine_iter,
-        vert_balance, edge_balance);
+      for (int w = 0; w < g->num_vertex_weights; ++w)
+        label_balance_edges_maxcut_weighted(*g, num_parts, parts,
+          edge_outer_iter, edge_balance_iter, edge_refine_iter,
+          vert_balance, edge_balance, w);
       elt3 = timer() - elt3;
       if (verbose) printf("done: %9.6lfs\n", elt3);
     }
@@ -296,7 +300,7 @@ extern "C" int pulp_run(pulp_graph_t* g, pulp_part_control_t* ppc,
     if (verbose) printf("\tFinished outer loop iter %d: %9.6lf(s)\n", (boi+1), elt2);
   
     // Show connectivity details after each iteration
-    connectivity_bfs(*g, num_parts, parts);
+    //connectivity_bfs(*g, num_parts, parts);
   }
 
   elt = timer() - elt;
@@ -361,7 +365,10 @@ void evaluate_quality(pulp_graph_t& g, int num_parts, int* parts)
   for (int v = 0; v < num_verts; ++v)
   { 
     if (weighted)
-      part_sizes[parts[v]] += g.vertex_weights[v];
+    {
+      for (int w = 0; w < g.num_vertex_weights; ++w)
+        part_sizes[parts[v]] += g.vertex_weights[w][v];
+    }
     else
       ++part_sizes[parts[v]];
 

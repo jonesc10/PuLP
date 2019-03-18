@@ -104,7 +104,8 @@ int main(int argc, char** argv)
   long m = 0;
   int* out_array = NULL;
   long* out_degree_list = NULL;
-  int* vertex_weights = NULL;
+  int num_vertex_weights = 0;
+  int** vertex_weights = NULL;
   long vertex_weights_sum = 0;
   int* edge_weights;
   char* graph_name = strdup(argv[1]);
@@ -122,7 +123,7 @@ int main(int argc, char** argv)
   bool do_lp_init = false;
   bool do_edge_balance = false;
   bool do_maxcut_balance = false;
-  bool eval_quality = false;
+  bool eval_quality = true;
   int pulp_seed = rand();
 
   char c;
@@ -179,9 +180,11 @@ int main(int argc, char** argv)
   printf("Reading in %s ... ", graph_name);
   elt = timer();
   read_graph(graph_name, n, m, out_array, out_degree_list, 
-             vertex_weights, edge_weights, vertex_weights_sum);
+             num_vertex_weights, vertex_weights, edge_weights, 
+             vertex_weights_sum);
   pulp_graph_t g = {n, m, out_array, out_degree_list, 
-                    vertex_weights, edge_weights, vertex_weights_sum};
+                    num_vertex_weights, vertex_weights, edge_weights, 
+                    vertex_weights_sum};
   elt = timer() - elt;
   printf("... Done: %9.6lf\n", elt);
 

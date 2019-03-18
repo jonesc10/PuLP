@@ -63,7 +63,8 @@ typedef struct {
   long m;
   int* out_array;
   long* out_degree_list;
-  int* vertex_weights;
+  int num_vertex_weights;
+  int** vertex_weights;
   int* edge_weights;
   long vertex_weights_sum;
 } pulp_graph_t;

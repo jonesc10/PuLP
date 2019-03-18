@@ -620,7 +620,7 @@ while(t < edge_outer_iter)
 void label_balance_edges_maxcut_weighted(
   pulp_graph_t& g, int num_parts, int* parts,
   int edge_outer_iter, int edge_balance_iter, int edge_refine_iter,
-  double vert_balance, double edge_balance)
+  double vert_balance, double edge_balance, int current_vert_weight=0)
 {
   int num_verts = g.n;
   unsigned num_edges = g.m;
@@ -680,7 +680,8 @@ void label_balance_edges_maxcut_weighted(
   {
     int part = parts[i];
     unsigned out_degree = out_degree(g, i);
-    if (has_vwgts) part_sizes_thread[part] += g.vertex_weights[i];
+    if (has_vwgts) 
+      part_sizes_thread[part] += g.vertex_weights[current_vert_weight][i];
     else ++part_sizes_thread[part];
     part_edge_sizes_thread[part] += out_degree;
 
@@ -796,7 +797,7 @@ while(t < edge_outer_iter)
       in_queue[v] = false;
       int part = parts[v];
       int v_weight = 1;
-      if (has_vwgts) v_weight = g.vertex_weights[v];
+      if (has_vwgts) v_weight = g.vertex_weights[current_vert_weight][v];
 
       for (int p = 0; p < num_parts; ++p)
         part_counts[p] = 0.0;
@@ -1006,7 +1007,7 @@ while(t < edge_outer_iter)
       in_queue[v] = false;
       int part = parts[v];
       int v_weight = 1;
-      if (has_vwgts) v_weight = g.vertex_weights[v];
+      if (has_vwgts) v_weight = g.vertex_weights[current_vert_weight][v];
 
       for (int p = 0; p < num_parts; ++p)
         part_counts[p] = 0;
