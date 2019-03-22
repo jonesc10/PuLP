@@ -325,22 +325,27 @@ void evaluate_quality(pulp_graph_t& g, int num_parts, int* parts)
 
   double comms_frac = 0.0;
 
+  int num_vertex_weights = 1;
   int num_verts = g.n;
   unsigned num_edges = g.m;
   unsigned num_comms = 0;
   bool** neighborhoods = new bool*[num_parts];
   bool** comms = new bool*[num_parts];
-  long* part_sizes = new long[num_parts];
+  long** part_sizes = new long*[num_parts];
   int* num_comms_out = new int[num_parts];
   long* edge_cuts = new long[num_parts];
   int* boundary_verts = new int[num_parts];
   bool** part_to_part = new bool*[num_parts];
   unsigned* edges_per_part = new unsigned[num_parts];
   bool weighted = (g.vertex_weights_sum > 0);
+  if (weighted) num_vertex_weights = g.num_vertex_weights;
 
   for (int i = 0; i < num_parts; ++i)
   {
-    part_sizes[i] = 0;
+    part_sizes[i] = new long[num_vertex_weights];
+    
+    for (int w = 0; w < num_vertex_weights; ++w)
+      part_sizes[i][w] = 0;
     num_comms_out[i] = 0;
     edge_cuts[i] = 0;
     edges_per_part[i] = 0;
@@ -363,11 +368,11 @@ void evaluate_quality(pulp_graph_t& g, int num_parts, int* parts)
   { 
     if (weighted)
     {
-      for (int w = 0; w < g.num_vertex_weights; ++w)
-        part_sizes[parts[v]] += g.vertex_weights[w][v];
+      for (int w = 0; w < num_vertex_weights; ++w)
+        part_sizes[parts[v]][w] += g.vertex_weights[w][v];
     }
     else
-      ++part_sizes[parts[v]];
+      ++part_sizes[parts[v]][0];
 
     int part = parts[v];
     neighborhoods[part][v] = true;
@@ -419,7 +424,9 @@ void evaluate_quality(pulp_graph_t& g, int num_parts, int* parts)
 
   long quality = 0;
   long edge_cut = 0;
-  long max_vert_size = 0;
+  long* max_vert_size = new long[num_vertex_weights];
+  for (int w = 0; w < num_vertex_weights; ++w)
+    max_vert_size[w] = 0;
   unsigned max_edge_size = 0.0;
   int max_comm_size = 0;
   unsigned max_edge_cut = 0;
@@ -429,7 +436,7 @@ void evaluate_quality(pulp_graph_t& g, int num_parts, int* parts)
   {
 #if VERBOSE
     printf("p: %d, v: %li, e: %u, com: %d, cut: %li, bound: %d\n", 
-      i, part_sizes[i], 
+      i, part_sizes[i][0], 
       edges_per_part[i], num_comms_out[i], edge_cuts[i], boundary_verts[i]);
 #endif
     quality += num_comms_out[i];
@@ -438,8 +445,11 @@ void evaluate_quality(pulp_graph_t& g, int num_parts, int* parts)
 
     if (edge_cuts[i] > max_edge_cut)
       max_edge_cut = edge_cuts[i];
-    if (part_sizes[i] > max_vert_size)
-      max_vert_size = part_sizes[i];
+    for (int w = 0; w < num_vertex_weights; ++w)
+    {
+      if (part_sizes[i][w] > max_vert_size[w])
+        max_vert_size[w] = part_sizes[i][w];
+    }
     if (edges_per_part[i] > max_edge_size)
       max_edge_size = edges_per_part[i];
     if (num_comms_out[i] > max_comm_size)
@@ -450,16 +460,19 @@ void evaluate_quality(pulp_graph_t& g, int num_parts, int* parts)
 
   comms_frac = comms_frac / (double)(num_parts*(num_parts-1));
 
-  long avg_size_vert;
+  long* avg_size_vert = new long[num_vertex_weights];
   if (weighted) 
-    avg_size_vert = g.vertex_weights_sum / (long)num_parts;
+    for (int w = 0; w < num_vertex_weights; ++ w)
+      avg_size_vert[w] = g.vertex_weights_sum[w] / (long)num_parts;
   else 
-    avg_size_vert = num_verts / (unsigned)num_parts;
+    avg_size_vert[0] = num_verts / (unsigned)num_parts;
   unsigned avg_size_edge = num_edges / (unsigned)num_parts;
   unsigned avg_comm_size = num_comms / (unsigned)num_parts;
   unsigned avg_edge_cut = edge_cut / (unsigned)num_parts;
   unsigned avg_bound = num_bound / (unsigned)num_parts;
-  double max_overweight_v = (double)max_vert_size/(double)avg_size_vert;
+  double* max_overweight_v = new double[num_vertex_weights];
+  for (int w = 0; w < num_vertex_weights; ++w)
+    max_overweight_v[w] = (double)max_vert_size[w]/(double)avg_size_vert[w];
   double max_overweight_e = (double)max_edge_size/(double)avg_size_edge;
   double max_overweight_cv = (double)max_comm_size/(double)avg_comm_size;
   double max_overweight_ec = (double)max_edge_cut/(double)avg_edge_cut;
@@ -478,7 +491,8 @@ void evaluate_quality(pulp_graph_t& g, int num_parts, int* parts)
   printf("Comm ratio: %9.3lf\n", comVolRatio);
   printf("Edge ratio: %9.3lf\n", edgeCutRatio);
   printf("Boundary ratio: %9.3lf\n", boundVertRatio);
-  printf("Vert overweight: %9.3lf\n", max_overweight_v);
+  for (int w = 0; w < num_vertex_weights; ++w)
+    printf("Vert overweight %2d: %9.3lf\n", w+1, max_overweight_v[w]);
   printf("Edge overweight: %9.3lf\n", max_overweight_e);
   printf("Boundary overweight: %9.3lf\n", max_overweight_b);
   printf("CommVol overweight: %9.3lf, max: %u\n", max_overweight_cv, max_comm_size);
@@ -487,7 +501,7 @@ void evaluate_quality(pulp_graph_t& g, int num_parts, int* parts)
   printf("writing to output.csv... ");
   ofstream output;
   output.open("output.csv", ios::app);
-  output << max_overweight_v << "," << edgeCut << "\n";
+  output << max_overweight_v[0] << "," << edgeCut << "\n";
   output.close();
   printf("Done\n");
 

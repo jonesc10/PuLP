@@ -66,7 +66,7 @@ typedef struct {
   int num_vertex_weights;
   int** vertex_weights;
   int* edge_weights;
-  long vertex_weights_sum;
+  long* vertex_weights_sum;
 } pulp_graph_t;
 #define out_degree(g, n) (g.out_degree_list[n+1] - g.out_degree_list[n])
 #define out_vertices(g, n) &g.out_array[g.out_degree_list[n]]

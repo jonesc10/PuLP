@@ -436,12 +436,13 @@ void label_balance_verts_weighted(
 
   bool has_vwgts = (g.vertex_weights != NULL);
   bool has_ewgts = (g.edge_weights != NULL);
-  if (!has_vwgts) g.vertex_weights_sum = g.n;
+  if (!has_vwgts) g.vertex_weights_sum[0] = g.n;
  
   for (int i = 0; i < num_parts; ++i)
     part_sizes[i] = 0;
 
-  double avg_size = (double)g.vertex_weights_sum / (double)num_parts;
+  double avg_size = (double)g.vertex_weights_sum[current_vert_weight] /
+    (double)num_parts;
   int num_swapped_1 = 0;
   int num_swapped_2 = 0;
   double max_v;

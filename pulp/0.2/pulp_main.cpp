@@ -106,7 +106,7 @@ int main(int argc, char** argv)
   long* out_degree_list = NULL;
   int num_vertex_weights = 0;
   int** vertex_weights = NULL;
-  long vertex_weights_sum = 0;
+  long* vertex_weights_sum = NULL;
   int* edge_weights;
   char* graph_name = strdup(argv[1]);
   char* num_parts_str = strdup(argv[2]);

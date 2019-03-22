@@ -256,7 +256,7 @@ int* label_prop_weighted(pulp_graph_t& g, int num_parts, int* parts,
   int num_verts = g.n;  
   bool has_vwgts = (g.vertex_weights != NULL);
   bool has_ewgts = (g.edge_weights != NULL);
-  if (!has_vwgts) g.vertex_weights_sum = g.n;
+  if (!has_vwgts) g.vertex_weights_sum[0] = g.n;
 
   int* part_sizes = new int[num_parts];
   for (int i = 0; i < num_parts; ++i)
@@ -270,7 +270,7 @@ int* label_prop_weighted(pulp_graph_t& g, int num_parts, int* parts,
   int queue_size = num_verts;
   int next_size = 0;
 
-  double avg_size = (double)g.vertex_weights_sum / (double)num_parts;
+  double avg_size = (double)g.vertex_weights_sum[0] / (double)num_parts;
   double min_size = avg_size * balance_vert_lower;
 
 #pragma omp parallel

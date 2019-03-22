@@ -510,7 +510,7 @@ void label_balance_edges_weighted(
 
   bool has_vwgts = (g.vertex_weights != NULL);
   bool has_ewgts = (g.edge_weights != NULL);
-  if (!has_vwgts) g.vertex_weights_sum = g.n;
+  if (!has_vwgts) g.vertex_weights_sum[0] = g.n;
 
   int* part_sizes = new int[num_parts];
   unsigned* part_edge_sizes = new unsigned[num_parts]; 
@@ -519,7 +519,7 @@ void label_balance_edges_weighted(
   for (int i = 0; i < num_parts; ++i)
     part_edge_sizes[i] = 0;
 
-  double avg_size = (double)g.vertex_weights_sum / (double)num_parts;
+  double avg_size = (double)g.vertex_weights_sum[0] / (double)num_parts;
   double avg_edge_size = num_edges / num_parts;
   int num_swapped_1 = 0;
   int num_swapped_2 = 0;
