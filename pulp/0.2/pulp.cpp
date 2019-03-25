@@ -59,11 +59,16 @@
 #include "label_balance_edges.cpp"
 #include "label_balance_edges_maxcut.cpp"
 
-#include <fstream> // For vert_overweight, edgecut file output.csv
+#include "compactness.cpp"
+#include "competitiveness.cpp"
+
+#include <fstream>
+
+#define csvfilename "output.csv"
 
 int seed;
 
-int* connectivity_bfs(pulp_graph_t& g, int num_parts, int* parts)
+int* connectivity_bfs(pulp_graph_t& g, int num_parts, int* parts, bool write_to_file)
 {
   int* conn = new int[g.n]; // connectivity assignments  
   for (int v = 0; v < g.n; ++v)
@@ -130,30 +135,56 @@ int* connectivity_bfs(pulp_graph_t& g, int num_parts, int* parts)
   }
 
   int** part_conn_sizes = (int**) malloc(num_parts*sizeof(int*));
+  int* part_conn_iter = (int*) malloc(num_parts*sizeof(int));
+  int* part_max_size = (int*) malloc(num_parts*sizeof(int));
   for (int p = 0; p < num_parts; ++p) {
     part_conn_sizes[p] = (int*) malloc(part_conns[p]*sizeof(int));
-  }
-
-  int* part_conn_iter = (int*) malloc(num_parts*sizeof(int));
-  for (int p = 0; p < num_parts; ++p) {
     part_conn_iter[p] = 0;
+    part_max_size[p] = 0;
   }
-
+  // Calculate the average size of the small (non-giant) components
+  int num_small_comps = num_comps - num_parts;
+  float avg_small_size = 0.0;
   for (int v = 0; v < g.n; ++v) {
     if (conn[v] == v) {
       int p = parts[v];
       part_conn_sizes[p][part_conn_iter[p]] = conn_sizes[v];
       ++part_conn_iter[p];
+      if (num_small_comps != 0) {
+        if (conn_sizes[v] > part_max_size[p])
+          part_max_size[p] = conn_sizes[v];
+        
+        avg_small_size += conn_sizes[v] / (float)num_small_comps;
+      }
     } 
   }
 
+  if (num_small_comps != 0) {
+    for (int p = 0; p < num_parts; ++p) {
+      avg_small_size -= part_max_size[p] / (float)num_small_comps;
+    }
+  }
+
   printf("Total number of components: %d\n", num_comps);
+  printf("Average size of small components: %f\n", avg_small_size);
   for (int p = 0; p < num_parts; ++p) {
     printf("  Partition %2d has %4d component(s)\n", p, part_conns[p]);
-    for (int i = 0; i < part_conns[p]; ++i) {
-      printf("%4d  ", part_conn_sizes[p][i]);
+    // Don't output this if we mainly want to write to the file
+    if (!write_to_file) {
+      for (int i = 0; i < part_conns[p]; ++i) {
+        printf("%4d  ", part_conn_sizes[p][i]);
+      }
+      printf("\n");
     }
-    printf("\n");
+  }
+
+  if (write_to_file) {
+    printf("writing to %s... ", csvfilename);
+    ofstream output;
+    output.open(csvfilename, ios::app);
+    output << num_small_comps << "," << avg_small_size << "\n";
+    output.close();
+    printf("Done\n");
   }
 
   free(visited);
@@ -161,6 +192,9 @@ int* connectivity_bfs(pulp_graph_t& g, int num_parts, int* parts)
   free(next_queue);
   free(part_conns);
   free(conn_sizes);
+  free(part_conn_sizes);
+  free(part_conn_iter);
+  free(part_max_size);
 
   return conn;
 }
@@ -297,7 +331,7 @@ extern "C" int pulp_run(pulp_graph_t* g, pulp_part_control_t* ppc,
     if (verbose) printf("\tFinished outer loop iter %d: %9.6lf(s)\n", (boi+1), elt2);
   
     // Show connectivity details after each iteration
-    //connectivity_bfs(*g, num_parts, parts);
+    //connectivity_bfs(*g, num_parts, parts, false);
   }
 
   elt = timer() - elt;
@@ -498,12 +532,33 @@ void evaluate_quality(pulp_graph_t& g, int num_parts, int* parts)
   printf("CommVol overweight: %9.3lf, max: %u\n", max_overweight_cv, max_comm_size);
   printf("EdgeCut overweight: %9.3lf, max: %u\n", max_overweight_ec, max_edge_cut);
 
-  printf("writing to output.csv... ");
+  bool compute_compact_competitive = true;
+  float compact = 0.0;
+  float competitive = 0.0;
+  if (compute_compact_competitive)
+  {
+    compact = compactness(g, num_parts, parts);
+    competitive = competitiveness(g, num_parts, parts);
+    printf("Compactness: %.4f\n", compact); 
+    printf("Competitiveness: %.4f\n", competitive); 
+  }
+
+  printf("writing to %s... ", csvfilename);
   ofstream output;
-  output.open("output.csv", ios::app);
-  output << max_overweight_v[0] << "," << edgeCut << "\n";
+  output.open(csvfilename, ios::app);
+  for (int w = 0; w < num_vertex_weights; ++w)
+  {
+    output << max_overweight_v[w] << ",";
+  }
+  output << edgeCut << ",";
+  if (compute_compact_competitive)
+  {
+    output << compact << "," << competitive;
+  }
   output.close();
   printf("Done\n");
+
+  connectivity_bfs(g, num_parts, parts, true);
 
   for (int i = 0; i < num_parts; ++i)
   {
